@@ -37,6 +37,12 @@ export const reviewStatusEnum = pgEnum("review_status", [
 
 export const roleEnum = pgEnum("role", ["owner", "manager", "accountant"]);
 
+export const periodTypeEnum = pgEnum("period_type", [
+  "monthly",
+  "quarterly",
+  "annual",
+]);
+
 // Tables
 
 export const practices = pgTable("practices", {
@@ -46,6 +52,7 @@ export const practices = pgTable("practices", {
   qboTokens: text("qbo_tokens"), // AES-256-GCM encrypted JSON
   fiscalYearStart: integer("fiscal_year_start").default(1), // month 1-12
   practiceAddresses: jsonb("practice_addresses").$type<string[]>().default([]),
+  reserveThreshold: numeric("reserve_threshold", { precision: 12, scale: 2 }).default("10000.00"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -230,6 +237,59 @@ export const auditLog = pgTable(
   ]
 );
 
+export const budgets = pgTable(
+  "budgets",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    year: integer("year").notNull(),
+    accountRef: text("account_ref").notNull(),
+    monthlyTarget: numeric("monthly_target", { precision: 12, scale: 2 }).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("budgets_practice_year_account_idx").on(
+      table.practiceId,
+      table.year,
+      table.accountRef
+    ),
+  ]
+);
+
+export const financialSnapshots = pgTable(
+  "financial_snapshots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    periodStart: timestamp("period_start").notNull(),
+    periodEnd: timestamp("period_end").notNull(),
+    periodType: periodTypeEnum("period_type").notNull(),
+    revenue: numeric("revenue", { precision: 12, scale: 2 }),
+    operatingExpenses: numeric("operating_expenses", { precision: 12, scale: 2 }),
+    overheadRatio: numeric("overhead_ratio", { precision: 5, scale: 4 }),
+    netOperatingIncome: numeric("net_operating_income", { precision: 12, scale: 2 }),
+    ownerCompensation: numeric("owner_compensation", { precision: 12, scale: 2 }),
+    trueNetProfit: numeric("true_net_profit", { precision: 12, scale: 2 }),
+    businessFreeCash: numeric("business_free_cash", { precision: 12, scale: 2 }),
+    personalFreeCash: numeric("personal_free_cash", { precision: 12, scale: 2 }),
+    combinedFreeCash: numeric("combined_free_cash", { precision: 12, scale: 2 }),
+    excessCash: numeric("excess_cash", { precision: 12, scale: 2 }),
+    computedAt: timestamp("computed_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("snapshot_practice_period_idx").on(
+      table.practiceId,
+      table.periodType,
+      table.periodStart
+    ),
+  ]
+);
+
 // Type exports
 export type Practice = typeof practices.$inferSelect;
 export type NewPractice = typeof practices.$inferInsert;
@@ -245,3 +305,7 @@ export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
 export type AuditLogEntry = typeof auditLog.$inferSelect;
 export type NewAuditLogEntry = typeof auditLog.$inferInsert;
+export type Budget = typeof budgets.$inferSelect;
+export type NewBudget = typeof budgets.$inferInsert;
+export type FinancialSnapshot = typeof financialSnapshots.$inferSelect;
+export type NewFinancialSnapshot = typeof financialSnapshots.$inferInsert;

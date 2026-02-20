@@ -9,133 +9,161 @@ const pool = new Pool({
 
 const db = drizzle(pool);
 
-// Seed data: ~100 transactions across dental supply, lab, software, payroll, personal, ambiguous, misc
-const seedTransactions: {
+// Dental seasonality multipliers (applied to revenue)
+const SEASONALITY: Record<number, number> = {
+  1: 1.05, // Jan - benefit reset
+  2: 1.0,
+  3: 1.02,
+  4: 1.0,
+  5: 0.98,
+  6: 0.9, // Jun - summer dip
+  7: 0.85, // Jul - summer low
+  8: 0.88,
+  9: 0.95,
+  10: 0.98,
+  11: 1.08, // Nov - year-end rush
+  12: 1.12, // Dec - insurance rush
+};
+
+function vary(base: number, pct: number = 10): number {
+  const factor = 1 + (Math.random() * 2 - 1) * (pct / 100);
+  return Math.round(base * factor * 100) / 100;
+}
+
+interface SeedTxn {
   vendorName: string;
   description: string;
   amount: string;
   accountRef: string;
-  category: "dental_supply" | "lab" | "software" | "payroll" | "personal" | "ambiguous" | "misc";
-}[] = [
-  // ~30 Dental supply vendors
-  { vendorName: "Henry Schein", description: "Dental supplies - composite resin", amount: "-1245.50", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Henry Schein", description: "Prophy paste and cups", amount: "-389.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Henry Schein", description: "Disposable prophy angles", amount: "-210.75", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Patterson Dental", description: "Dental instruments - scalers", amount: "-875.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Patterson Dental", description: "X-ray film and sensors", amount: "-2340.00", accountRef: "Equipment", category: "dental_supply" },
-  { vendorName: "Patterson Dental", description: "Sterilization pouches", amount: "-156.25", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Benco Dental", description: "Nitrous oxide supplies", amount: "-445.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Benco Dental", description: "Impression materials", amount: "-312.50", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Benco Dental", description: "Disposable bibs and cups", amount: "-89.99", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Darby Dental Supply", description: "Latex-free gloves case", amount: "-178.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Darby Dental Supply", description: "Face masks N95", amount: "-245.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Net32", description: "Cavitron tips and inserts", amount: "-198.50", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Net32", description: "Bonding agent", amount: "-345.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Net32", description: "Etchant gel", amount: "-67.50", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Ultradent Products", description: "Whitening supplies", amount: "-567.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Dentsply Sirona", description: "Endodontic files", amount: "-423.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Dentsply Sirona", description: "Ceramic blocks for CEREC", amount: "-1890.00", accountRef: "Equipment", category: "dental_supply" },
-  { vendorName: "3M Dental", description: "Filtek composite", amount: "-678.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "3M Dental", description: "Impregum impression material", amount: "-234.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Hu-Friedy", description: "Gracey curettes set", amount: "-1120.00", accountRef: "Instruments", category: "dental_supply" },
-  { vendorName: "Hu-Friedy", description: "Mirror handles", amount: "-85.00", accountRef: "Instruments", category: "dental_supply" },
-  { vendorName: "Ivoclar Vivadent", description: "IPS e.max crowns", amount: "-945.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Kerr Dental", description: "Temp-Bond cement", amount: "-112.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Septodont", description: "Articaine cartridges", amount: "-289.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Septodont", description: "Lidocaine cartridges", amount: "-195.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Crosstex International", description: "Infection control products", amount: "-334.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Young Dental", description: "Prophy cups and brushes", amount: "-145.00", accountRef: "Supplies", category: "dental_supply" },
-  { vendorName: "Brasseler USA", description: "Diamond burs assorted", amount: "-567.00", accountRef: "Instruments", category: "dental_supply" },
-  { vendorName: "Brasseler USA", description: "Carbide burs", amount: "-234.50", accountRef: "Instruments", category: "dental_supply" },
-  { vendorName: "Midwest Dental", description: "Handpiece maintenance kit", amount: "-189.00", accountRef: "Equipment", category: "dental_supply" },
+}
 
-  // ~10 Lab fees
-  { vendorName: "Glidewell Dental Lab", description: "PFM crowns x4", amount: "-1200.00", accountRef: "Lab Fees", category: "lab" },
-  { vendorName: "Glidewell Dental Lab", description: "Zirconia crowns x6", amount: "-2100.00", accountRef: "Lab Fees", category: "lab" },
-  { vendorName: "Glidewell Dental Lab", description: "Night guard", amount: "-175.00", accountRef: "Lab Fees", category: "lab" },
-  { vendorName: "Burbank Dental Lab", description: "Porcelain veneers x8", amount: "-3200.00", accountRef: "Lab Fees", category: "lab" },
-  { vendorName: "Burbank Dental Lab", description: "Denture repair", amount: "-250.00", accountRef: "Lab Fees", category: "lab" },
-  { vendorName: "Burbank Dental Lab", description: "Full denture upper", amount: "-890.00", accountRef: "Lab Fees", category: "lab" },
-  { vendorName: "Artistic Dental Lab", description: "Implant abutment custom", amount: "-450.00", accountRef: "Lab Fees", category: "lab" },
-  { vendorName: "Artistic Dental Lab", description: "Partial denture framework", amount: "-675.00", accountRef: "Lab Fees", category: "lab" },
-  { vendorName: "Bay Area Dental Lab", description: "Temporary crowns x3", amount: "-225.00", accountRef: "Lab Fees", category: "lab" },
-  { vendorName: "Pacific Dental Lab Services", description: "Orthodontic retainers x2", amount: "-350.00", accountRef: "Lab Fees", category: "lab" },
+// Monthly recurring revenue templates (base amounts before seasonality)
+function generateMonthlyRevenue(month: number): SeedTxn[] {
+  const s = SEASONALITY[month] || 1.0;
+  return [
+    {
+      vendorName: "Square Payment Processing",
+      description: "Patient collections - credit card",
+      amount: String(vary(45000 * s)),
+      accountRef: "Patient Collections",
+    },
+    {
+      vendorName: "Delta Dental Insurance",
+      description: "Insurance reimbursements",
+      amount: String(vary(22000 * s)),
+      accountRef: "Insurance Reimbursements",
+    },
+    {
+      vendorName: "Aetna Dental",
+      description: "Insurance reimbursements",
+      amount: String(vary(8500 * s)),
+      accountRef: "Insurance Reimbursements",
+    },
+    {
+      vendorName: "CareCredit",
+      description: "Patient financing revenue",
+      amount: String(vary(3500 * s, 20)),
+      accountRef: "Financing Revenue",
+    },
+    {
+      vendorName: "Cash/Check Deposits",
+      description: "Patient cash and check payments",
+      amount: String(vary(12000 * s, 15)),
+      accountRef: "Patient Collections",
+    },
+  ];
+}
 
-  // ~10 Practice software
-  { vendorName: "Dentrix", description: "Monthly subscription", amount: "-499.00", accountRef: "Software", category: "software" },
-  { vendorName: "Dentrix", description: "Annual support renewal", amount: "-2400.00", accountRef: "Software", category: "software" },
-  { vendorName: "Eaglesoft", description: "Monthly license", amount: "-399.00", accountRef: "Software", category: "software" },
-  { vendorName: "Pearl", description: "AI second opinion monthly", amount: "-299.00", accountRef: "Software", category: "software" },
-  { vendorName: "Weave", description: "Patient communication platform", amount: "-349.00", accountRef: "Software", category: "software" },
-  { vendorName: "Weave", description: "Phone system add-on", amount: "-149.00", accountRef: "Software", category: "software" },
-  { vendorName: "Curve Dental", description: "Cloud practice management", amount: "-450.00", accountRef: "Software", category: "software" },
-  { vendorName: "Open Dental", description: "Support plan monthly", amount: "-169.00", accountRef: "Software", category: "software" },
-  { vendorName: "Apteryx", description: "XrayVision imaging software", amount: "-129.00", accountRef: "Software", category: "software" },
-  { vendorName: "Dentally", description: "Cloud PMS monthly", amount: "-275.00", accountRef: "Software", category: "software" },
+// Monthly recurring expenses templates
+function generateMonthlyExpenses(): SeedTxn[] {
+  return [
+    // Payroll (largest expense)
+    { vendorName: "ADP", description: "Payroll processing - biweekly", amount: String(-vary(12500)), accountRef: "Payroll" },
+    { vendorName: "ADP", description: "Payroll processing - biweekly", amount: String(-vary(12500)), accountRef: "Payroll" },
+    // Rent
+    { vendorName: "ABC Property Management", description: "Office rent - 123 Main St", amount: "-4500.00", accountRef: "Rent" },
+    // Owner's Draw
+    { vendorName: "Owner's Draw", description: "Monthly owner distribution", amount: "-15000.00", accountRef: "Owner's Draw" },
+    // Loan payments
+    { vendorName: "Wells Fargo", description: "Practice acquisition loan payment", amount: "-3200.00", accountRef: "Practice Loan" },
+    { vendorName: "Bank of America", description: "Equipment loan - CEREC", amount: "-850.00", accountRef: "Equipment Loan" },
+    // Insurance
+    { vendorName: "State Farm Insurance", description: "Professional liability", amount: String(-vary(890)), accountRef: "Insurance" },
+    { vendorName: "Hartford Insurance", description: "Business property insurance", amount: String(-vary(445)), accountRef: "Insurance" },
+    // Utilities
+    { vendorName: "Pacific Gas & Electric", description: "Monthly electric bill", amount: String(-vary(460, 15)), accountRef: "Utilities" },
+    { vendorName: "City Water District", description: "Water and sewer", amount: String(-vary(125)), accountRef: "Utilities" },
+    { vendorName: "AT&T Business", description: "Phone and internet", amount: "-289.00", accountRef: "Utilities" },
+    // Software
+    { vendorName: "Dentrix", description: "Monthly subscription", amount: "-499.00", accountRef: "Software" },
+    { vendorName: "Weave", description: "Patient communication platform", amount: "-349.00", accountRef: "Software" },
+    { vendorName: "Pearl", description: "AI second opinion monthly", amount: "-299.00", accountRef: "Software" },
+    // Services
+    { vendorName: "Waste Management", description: "Medical waste disposal", amount: "-175.00", accountRef: "Services" },
+    { vendorName: "Cintas", description: "Uniform service monthly", amount: "-234.00", accountRef: "Services" },
+    // Marketing
+    { vendorName: "Yelp Business", description: "Advertising monthly", amount: "-350.00", accountRef: "Marketing" },
+  ];
+}
 
-  // ~8 Payroll
-  { vendorName: "ADP", description: "Payroll processing - biweekly", amount: "-12500.00", accountRef: "Payroll", category: "payroll" },
-  { vendorName: "ADP", description: "Payroll processing - biweekly", amount: "-12500.00", accountRef: "Payroll", category: "payroll" },
-  { vendorName: "ADP", description: "Year-end tax filing service", amount: "-350.00", accountRef: "Payroll", category: "payroll" },
-  { vendorName: "Gusto", description: "Payroll service monthly", amount: "-89.00", accountRef: "Payroll", category: "payroll" },
-  { vendorName: "Gusto", description: "Benefits administration", amount: "-45.00", accountRef: "Payroll", category: "payroll" },
-  { vendorName: "Gusto", description: "Workers comp premium", amount: "-234.00", accountRef: "Insurance", category: "payroll" },
-  { vendorName: "Paychex", description: "Payroll processing", amount: "-11800.00", accountRef: "Payroll", category: "payroll" },
-  { vendorName: "QuickBooks Payroll", description: "Payroll subscription", amount: "-75.00", accountRef: "Payroll", category: "payroll" },
+// Variable expenses that change month to month
+function generateVariableExpenses(month: number): SeedTxn[] {
+  const txns: SeedTxn[] = [];
 
-  // ~12 Personal
-  { vendorName: "Netflix", description: "Monthly subscription", amount: "-22.99", accountRef: "Entertainment", category: "personal" },
-  { vendorName: "Spotify", description: "Family plan", amount: "-16.99", accountRef: "Entertainment", category: "personal" },
-  { vendorName: "Planet Fitness", description: "Monthly membership", amount: "-24.99", accountRef: "Fitness", category: "personal" },
-  { vendorName: "Equinox", description: "Monthly membership", amount: "-185.00", accountRef: "Fitness", category: "personal" },
-  { vendorName: "HelloFresh", description: "Weekly meal kit", amount: "-89.99", accountRef: "Food", category: "personal" },
-  { vendorName: "Blue Apron", description: "Meal delivery", amount: "-71.94", accountRef: "Food", category: "personal" },
-  { vendorName: "Hulu", description: "Streaming monthly", amount: "-17.99", accountRef: "Entertainment", category: "personal" },
-  { vendorName: "Disney+", description: "Annual subscription", amount: "-139.99", accountRef: "Entertainment", category: "personal" },
-  { vendorName: "Peloton", description: "Monthly membership", amount: "-44.00", accountRef: "Fitness", category: "personal" },
-  { vendorName: "Starbucks", description: "Auto-reload", amount: "-50.00", accountRef: "Food", category: "personal" },
-  { vendorName: "Uber Eats", description: "Food delivery", amount: "-34.50", accountRef: "Food", category: "personal" },
-  { vendorName: "DoorDash", description: "Food delivery", amount: "-42.75", accountRef: "Food", category: "personal" },
+  // Dental supplies (varies by patient volume)
+  const s = SEASONALITY[month] || 1.0;
+  txns.push(
+    { vendorName: "Henry Schein", description: "Dental supplies - composite resin", amount: String(-vary(1250 * s)), accountRef: "Supplies" },
+    { vendorName: "Henry Schein", description: "Prophy paste and disposables", amount: String(-vary(400 * s)), accountRef: "Supplies" },
+    { vendorName: "Patterson Dental", description: "Dental instruments", amount: String(-vary(900 * s, 20)), accountRef: "Supplies" },
+    { vendorName: "Benco Dental", description: "Nitrous oxide and impression materials", amount: String(-vary(500 * s)), accountRef: "Supplies" },
+    { vendorName: "3M Dental", description: "Filtek composite and materials", amount: String(-vary(680 * s)), accountRef: "Supplies" },
+  );
 
-  // ~15 Ambiguous (Amazon, Walmart, Target, generic)
-  { vendorName: "Amazon.com", description: "Office supplies", amount: "-156.78", accountRef: "Supplies", category: "ambiguous" },
-  { vendorName: "Amazon.com", description: "Order #114-2345678", amount: "-89.99", accountRef: "Supplies", category: "ambiguous" },
-  { vendorName: "Amazon.com", description: "Prime membership", amount: "-14.99", accountRef: "Subscriptions", category: "ambiguous" },
-  { vendorName: "Amazon.com", description: "Kindle purchase", amount: "-12.99", accountRef: "Entertainment", category: "ambiguous" },
-  { vendorName: "Walmart", description: "Store purchase", amount: "-234.56", accountRef: "Supplies", category: "ambiguous" },
-  { vendorName: "Walmart", description: "Cleaning supplies", amount: "-67.89", accountRef: "Supplies", category: "ambiguous" },
-  { vendorName: "Walmart", description: "Store purchase", amount: "-45.23", accountRef: "Supplies", category: "ambiguous" },
-  { vendorName: "Target", description: "Store purchase", amount: "-123.45", accountRef: "Supplies", category: "ambiguous" },
-  { vendorName: "Target", description: "Store purchase", amount: "-78.90", accountRef: "Supplies", category: "ambiguous" },
-  { vendorName: "Costco", description: "Warehouse purchase", amount: "-456.78", accountRef: "Supplies", category: "ambiguous" },
-  { vendorName: "Costco", description: "Paper products bulk", amount: "-189.99", accountRef: "Supplies", category: "ambiguous" },
-  { vendorName: "Staples", description: "Printer toner", amount: "-234.00", accountRef: "Office", category: "ambiguous" },
-  { vendorName: "Office Depot", description: "Paper and folders", amount: "-89.50", accountRef: "Office", category: "ambiguous" },
-  { vendorName: "Best Buy", description: "Computer monitor", amount: "-549.99", accountRef: "Equipment", category: "ambiguous" },
-  { vendorName: "Apple Store", description: "iPad purchase", amount: "-999.00", accountRef: "Equipment", category: "ambiguous" },
+  // Lab fees (correlate with patient volume)
+  txns.push(
+    { vendorName: "Glidewell Dental Lab", description: "Crowns and bridges", amount: String(-vary(2100 * s, 25)), accountRef: "Lab Fees" },
+    { vendorName: "Burbank Dental Lab", description: "Veneers and dentures", amount: String(-vary(1200 * s, 25)), accountRef: "Lab Fees" },
+  );
 
-  // Account mapping test: unknown vendors with clear QBO account refs
-  { vendorName: "Acme Lab Services", description: "Lab work for patient cases", amount: "-850.00", accountRef: "Lab Fees", category: "misc" },
-  { vendorName: "LA Fitness", description: "Monthly membership", amount: "-49.99", accountRef: "Fitness", category: "personal" },
-  { vendorName: "Smith & Associates", description: "Consulting services", amount: "-1500.00", accountRef: "Professional Fees", category: "misc" },
+  // Some months have CE/professional dues
+  if (month === 1 || month === 7) {
+    txns.push(
+      { vendorName: "ADA", description: "Annual membership dues", amount: "-580.00", accountRef: "Professional" },
+      { vendorName: "CDA", description: "State dental association dues", amount: "-350.00", accountRef: "Professional" },
+    );
+  }
+  if (month === 3 || month === 9) {
+    txns.push(
+      { vendorName: "Spear Education", description: "CE online course", amount: String(-vary(300, 30)), accountRef: "Education" },
+    );
+  }
 
-  // ~15 Misc (utilities, rent, insurance, CE courses)
-  { vendorName: "Pacific Gas & Electric", description: "Monthly electric bill", amount: "-456.78", accountRef: "Utilities", category: "misc" },
-  { vendorName: "City Water District", description: "Water and sewer", amount: "-123.45", accountRef: "Utilities", category: "misc" },
-  { vendorName: "AT&T Business", description: "Phone and internet", amount: "-289.00", accountRef: "Utilities", category: "misc" },
-  { vendorName: "Comcast Business", description: "Internet service", amount: "-199.00", accountRef: "Utilities", category: "misc" },
-  { vendorName: "ABC Property Management", description: "Office rent - 123 Main St", amount: "-4500.00", accountRef: "Rent", category: "misc" },
-  { vendorName: "ABC Property Management", description: "Office rent - 123 Main St", amount: "-4500.00", accountRef: "Rent", category: "misc" },
-  { vendorName: "State Farm Insurance", description: "Professional liability", amount: "-890.00", accountRef: "Insurance", category: "misc" },
-  { vendorName: "Hartford Insurance", description: "Business property insurance", amount: "-445.00", accountRef: "Insurance", category: "misc" },
-  { vendorName: "ADA", description: "Annual membership dues", amount: "-580.00", accountRef: "Professional", category: "misc" },
-  { vendorName: "CDA", description: "State dental association dues", amount: "-350.00", accountRef: "Professional", category: "misc" },
-  { vendorName: "Spear Education", description: "CE online course", amount: "-299.00", accountRef: "Education", category: "misc" },
-  { vendorName: "Dental Economics CE", description: "Continuing education seminar", amount: "-450.00", accountRef: "Education", category: "misc" },
-  { vendorName: "Waste Management", description: "Medical waste disposal", amount: "-175.00", accountRef: "Services", category: "misc" },
-  { vendorName: "Cintas", description: "Uniform service monthly", amount: "-234.00", accountRef: "Services", category: "misc" },
-  { vendorName: "Yelp Business", description: "Advertising monthly", amount: "-350.00", accountRef: "Marketing", category: "misc" },
-];
+  // Personal expenses (owner's personal charges through business account)
+  txns.push(
+    { vendorName: "Netflix", description: "Monthly subscription", amount: "-22.99", accountRef: "Entertainment" },
+    { vendorName: "Spotify", description: "Family plan", amount: "-16.99", accountRef: "Entertainment" },
+    { vendorName: "Equinox", description: "Monthly membership", amount: "-185.00", accountRef: "Fitness" },
+    { vendorName: "HelloFresh", description: "Weekly meal kit", amount: String(-vary(90)), accountRef: "Food" },
+  );
+
+  // Ambiguous purchases (1-3 per month)
+  const ambiguousCount = 1 + Math.floor(Math.random() * 3);
+  const ambiguousOptions: SeedTxn[] = [
+    { vendorName: "Amazon.com", description: "Office supplies", amount: String(-vary(160, 40)), accountRef: "Supplies" },
+    { vendorName: "Amazon.com", description: "Order #114-2345678", amount: String(-vary(90, 50)), accountRef: "Supplies" },
+    { vendorName: "Costco", description: "Warehouse purchase", amount: String(-vary(350, 30)), accountRef: "Supplies" },
+    { vendorName: "Target", description: "Store purchase", amount: String(-vary(100, 40)), accountRef: "Supplies" },
+    { vendorName: "Walmart", description: "Cleaning supplies", amount: String(-vary(70, 30)), accountRef: "Supplies" },
+    { vendorName: "Staples", description: "Printer toner and paper", amount: String(-vary(200, 30)), accountRef: "Office" },
+    { vendorName: "Best Buy", description: "Electronics purchase", amount: String(-vary(400, 50)), accountRef: "Equipment" },
+  ];
+  for (let i = 0; i < ambiguousCount; i++) {
+    txns.push(ambiguousOptions[Math.floor(Math.random() * ambiguousOptions.length)]);
+  }
+
+  return txns;
+}
 
 async function seed() {
   console.log("Seeding database...");
@@ -153,35 +181,85 @@ async function seed() {
 
   console.log(`Created practice: ${practice.name} (${practice.id})`);
 
-  // Generate transactions with dates spread over 12 months
+  // Generate 18 months of transactions (enough for forecast + trends)
   const now = new Date();
-  const txnValues = seedTransactions.map((txn, i) => {
-    // Spread dates over the past 12 months
-    const monthsAgo = Math.floor((i / seedTransactions.length) * 12);
-    const day = (i % 28) + 1;
-    const date = new Date(now.getFullYear(), now.getMonth() - monthsAgo, day);
+  const allTxns: Array<{
+    practiceId: string;
+    qboTxnId: string;
+    date: Date;
+    amount: string;
+    vendorName: string;
+    description: string;
+    accountRef: string;
+    rawJson: Record<string, unknown>;
+  }> = [];
 
-    return {
-      practiceId: practice.id,
-      qboTxnId: `demo-txn-${String(i + 1).padStart(4, "0")}`,
-      date,
-      amount: txn.amount,
-      vendorName: txn.vendorName,
-      description: txn.description,
-      accountRef: txn.accountRef,
-      rawJson: {
-        seed: true,
-        originalCategory: txn.category,
+  let txnCounter = 1;
+
+  for (let monthsAgo = 17; monthsAgo >= 0; monthsAgo--) {
+    const year = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1).getFullYear();
+    const month = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1).getMonth() + 1;
+
+    // Revenue transactions (spread across the month)
+    const revenue = generateMonthlyRevenue(month);
+    for (const txn of revenue) {
+      const day = 1 + Math.floor(Math.random() * 28);
+      allTxns.push({
+        practiceId: practice.id,
+        qboTxnId: `demo-txn-${String(txnCounter++).padStart(5, "0")}`,
+        date: new Date(year, month - 1, day),
+        amount: txn.amount,
         vendorName: txn.vendorName,
         description: txn.description,
+        accountRef: txn.accountRef,
+        rawJson: { seed: true, vendorName: txn.vendorName },
+      });
+    }
+
+    // Recurring expenses
+    const recurring = generateMonthlyExpenses();
+    for (const txn of recurring) {
+      const day = txn.vendorName === "ADP" ? (txnCounter % 2 === 0 ? 15 : 1) : 1 + Math.floor(Math.random() * 28);
+      allTxns.push({
+        practiceId: practice.id,
+        qboTxnId: `demo-txn-${String(txnCounter++).padStart(5, "0")}`,
+        date: new Date(year, month - 1, Math.min(day, 28)),
         amount: txn.amount,
-      },
-    };
-  });
+        vendorName: txn.vendorName,
+        description: txn.description,
+        accountRef: txn.accountRef,
+        rawJson: { seed: true, vendorName: txn.vendorName },
+      });
+    }
 
-  await db.insert(transactions).values(txnValues);
+    // Variable expenses
+    const variable = generateVariableExpenses(month);
+    for (const txn of variable) {
+      const day = 1 + Math.floor(Math.random() * 28);
+      allTxns.push({
+        practiceId: practice.id,
+        qboTxnId: `demo-txn-${String(txnCounter++).padStart(5, "0")}`,
+        date: new Date(year, month - 1, day),
+        amount: txn.amount,
+        vendorName: txn.vendorName,
+        description: txn.description,
+        accountRef: txn.accountRef,
+        rawJson: { seed: true, vendorName: txn.vendorName },
+      });
+    }
+  }
 
-  console.log(`Inserted ${txnValues.length} transactions`);
+  // Insert in batches to avoid query size limits
+  const BATCH_SIZE = 100;
+  for (let i = 0; i < allTxns.length; i += BATCH_SIZE) {
+    const batch = allTxns.slice(i, i + BATCH_SIZE);
+    await db.insert(transactions).values(batch);
+  }
+
+  console.log(`Inserted ${allTxns.length} transactions across 18 months`);
+  console.log("Income transactions included: Patient Collections, Insurance Reimbursements, Financing Revenue");
+  console.log("Owner's Draw: $15,000/mo");
+  console.log("Loan payments: Practice Loan $3,200/mo + Equipment Loan $850/mo");
   console.log("Seed complete!");
 
   await pool.end();

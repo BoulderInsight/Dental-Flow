@@ -6,7 +6,16 @@ import { Badge } from "@/components/ui/badge";
 import { CashFlowChart } from "@/components/dashboard/cash-flow-chart";
 import { TopCategories } from "@/components/dashboard/top-categories";
 import { QuickActions } from "@/components/dashboard/quick-actions";
-import { Receipt, CheckCircle, AlertTriangle, HelpCircle } from "lucide-react";
+import {
+  Receipt,
+  CheckCircle,
+  AlertTriangle,
+  HelpCircle,
+  DollarSign,
+  ArrowRight,
+} from "lucide-react";
+import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 interface DashboardData {
   totalTransactions: number;
@@ -18,12 +27,39 @@ interface DashboardData {
   topCategories: { accountRef: string | null; total: string; count: number }[];
 }
 
+interface SnapshotData {
+  revenue: number;
+  operatingExpenses: number;
+  overheadRatio: number;
+  netOperatingIncome: number;
+  combinedFreeCash: number;
+  excessCash: number;
+  computedAt: string;
+  isStale: boolean;
+}
+
+function overheadColor(ratio: number): string {
+  if (ratio < 0.55) return "text-green-400";
+  if (ratio <= 0.65) return "text-yellow-400";
+  if (ratio <= 0.75) return "text-orange-400";
+  return "text-red-400";
+}
+
 export default function DashboardPage() {
   const { data, isLoading } = useQuery<DashboardData>({
     queryKey: ["dashboard"],
     queryFn: async () => {
       const res = await fetch("/api/dashboard");
       if (!res.ok) throw new Error("Failed to load dashboard");
+      return res.json();
+    },
+  });
+
+  const { data: snapshot } = useQuery<SnapshotData>({
+    queryKey: ["financial-snapshot"],
+    queryFn: async () => {
+      const res = await fetch("/api/finance/snapshot");
+      if (!res.ok) throw new Error("Failed to load snapshot");
       return res.json();
     },
   });
@@ -97,6 +133,56 @@ export default function DashboardPage() {
           </Card>
         ))}
       </div>
+
+      {/* Financial Health Section */}
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between">
+          <div className="flex items-center gap-2">
+            <DollarSign size={18} className="text-green-400" />
+            <CardTitle className="text-base">Financial Health</CardTitle>
+          </div>
+          <Link
+            href="/finance"
+            className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
+          >
+            View Financial Details
+            <ArrowRight size={14} />
+          </Link>
+        </CardHeader>
+        <CardContent>
+          {snapshot ? (
+            <div className="grid gap-4 md:grid-cols-3">
+              <div>
+                <p className="text-xs text-muted-foreground">Overhead Ratio</p>
+                <p className={cn("text-2xl font-bold", overheadColor(snapshot.overheadRatio))}>
+                  {Math.round(snapshot.overheadRatio * 100)}%
+                </p>
+                <p className="text-xs text-muted-foreground">Target: 55-65%</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Combined Free Cash</p>
+                <p className="text-2xl font-bold text-blue-400">
+                  ${Math.round(snapshot.combinedFreeCash).toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground">This month</p>
+              </div>
+              <div>
+                <p className="text-xs text-muted-foreground">Net Operating Income</p>
+                <p className="text-2xl font-bold text-green-400">
+                  ${Math.round(snapshot.netOperatingIncome).toLocaleString()}
+                </p>
+                <p className="text-xs text-muted-foreground">This month</p>
+              </div>
+            </div>
+          ) : (
+            <Link href="/finance" className="block">
+              <div className="flex items-center justify-center rounded-lg border border-dashed p-8 text-muted-foreground hover:text-foreground hover:border-foreground/20 transition-colors">
+                Run your first financial analysis
+              </div>
+            </Link>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2">
