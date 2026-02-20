@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Download, Save, Wand2 } from "lucide-react";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import Link from "next/link";
 
 interface BudgetCategory {
@@ -34,6 +35,7 @@ interface BudgetVsActualRow {
 
 export default function BudgetPage() {
   const queryClient = useQueryClient();
+  const { canWrite } = usePermissions();
   const year = new Date().getFullYear();
   const [editMode, setEditMode] = useState(false);
   const [targets, setTargets] = useState<BudgetCategory[]>([]);
@@ -169,20 +171,22 @@ export default function BudgetPage() {
                 </tbody>
               </table>
             </div>
-            <div className="flex items-center justify-between mt-4 pt-4 border-t border-muted">
-              <Button variant="outline" size="sm" onClick={handleUseSuggested}>
-                <Wand2 size={14} className="mr-1" />
-                Use Suggested
-              </Button>
-              <Button
-                size="sm"
-                onClick={() => saveMutation.mutate(targets)}
-                disabled={saveMutation.isPending}
-              >
-                <Save size={14} className="mr-1" />
-                Save Budget
-              </Button>
-            </div>
+            {canWrite && (
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-muted">
+                <Button variant="outline" size="sm" onClick={handleUseSuggested}>
+                  <Wand2 size={14} className="mr-1" />
+                  Use Suggested
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() => saveMutation.mutate(targets)}
+                  disabled={saveMutation.isPending}
+                >
+                  <Save size={14} className="mr-1" />
+                  Save Budget
+                </Button>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -213,13 +217,15 @@ export default function BudgetPage() {
               Export
             </Button>
           </Link>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setEditMode(!editMode)}
-          >
-            {editMode ? "Cancel" : "Edit Targets"}
-          </Button>
+          {canWrite && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setEditMode(!editMode)}
+            >
+              {editMode ? "Cancel" : "Edit Targets"}
+            </Button>
+          )}
         </div>
       </div>
 

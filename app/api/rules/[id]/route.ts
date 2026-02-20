@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { userRules } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getSessionOrDemo } from "@/lib/auth/session";
+import { requireRole, PermissionError } from "@/lib/auth/permissions";
 
 const updateRuleSchema = z.object({
   matchType: z.enum(["vendor", "description", "amount_range"]).optional(),
@@ -20,6 +21,15 @@ export async function PUT(
     const session = await getSessionOrDemo();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    try {
+      requireRole(session, "write");
+    } catch (e) {
+      if (e instanceof PermissionError) {
+        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+      }
+      throw e;
     }
 
     const { id } = await params;
@@ -66,6 +76,15 @@ export async function DELETE(
     const session = await getSessionOrDemo();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    try {
+      requireRole(session, "write");
+    } catch (e) {
+      if (e instanceof PermissionError) {
+        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+      }
+      throw e;
     }
 
     const { id } = await params;

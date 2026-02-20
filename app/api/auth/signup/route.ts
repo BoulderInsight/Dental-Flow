@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { users, practices } from "@/lib/db/schema";
+import { users, practices, userPractices } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 
 const signupSchema = z.object({
@@ -10,6 +10,7 @@ const signupSchema = z.object({
   email: z.string().email(),
   password: z.string().min(8),
   practiceName: z.string().min(1).max(200),
+  industry: z.string().min(1).max(100).default("dental"),
 });
 
 export async function POST(request: NextRequest) {
@@ -24,7 +25,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const { name, email, password, practiceName } = parsed.data;
+    const { name, email, password, practiceName, industry } = parsed.data;
 
     // Check for existing user
     const [existing] = await db
@@ -40,13 +41,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Create practice
+    // Create practice with optional industry
     const [practice] = await db
       .insert(practices)
-      .values({ name: practiceName })
+      .values({
+        name: practiceName,
+        industry,
+      })
       .returning();
 
-    // Create user
+    // Create user (keep practiceId and role on users table for backward compat)
     const passwordHash = await bcrypt.hash(password, 12);
     const [user] = await db
       .insert(users)
@@ -58,6 +62,15 @@ export async function POST(request: NextRequest) {
         role: "owner",
       })
       .returning({ id: users.id });
+
+    // Create userPractices join row for multi-practice support
+    await db.insert(userPractices).values({
+      userId: user.id,
+      practiceId: practice.id,
+      role: "owner",
+      isDefault: true,
+      acceptedAt: new Date(),
+    });
 
     return NextResponse.json({ userId: user.id }, { status: 201 });
   } catch (error) {

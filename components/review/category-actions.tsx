@@ -2,7 +2,9 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { useFeedbackStore } from "@/lib/store/feedback-store";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
 
 interface CategoryActionsProps {
@@ -18,6 +20,7 @@ export function CategoryActions({
 }: CategoryActionsProps) {
   const queryClient = useQueryClient();
   const recordCorrection = useFeedbackStore((s) => s.recordCorrection);
+  const { canWrite } = usePermissions();
 
   const mutation = useMutation({
     mutationFn: async (category: string) => {
@@ -71,6 +74,16 @@ export function CategoryActions({
     } catch {
       toast.error("Failed to create rule");
     }
+  }
+
+  if (!canWrite) {
+    return (
+      <div className="flex gap-2">
+        <Badge variant="outline" className="text-blue-400 border-blue-400/30">
+          View Only
+        </Badge>
+      </div>
+    );
   }
 
   return (

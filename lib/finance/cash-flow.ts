@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { transactions, categorizations, practices } from "@/lib/db/schema";
 import { eq, and, gte, sql } from "drizzle-orm";
+import { getConfigForPractice } from "@/lib/industries";
 
 export interface FreeCashFlowReport {
   period: { start: Date; end: Date };
@@ -49,16 +50,22 @@ const OWNER_DRAW_PATTERNS = [
   "owner draw",
 ];
 
-function isDebtService(accountRef: string | null): boolean {
+function isDebtService(
+  accountRef: string | null,
+  patterns: string[] = DEBT_SERVICE_PATTERNS
+): boolean {
   if (!accountRef) return false;
   const lower = accountRef.toLowerCase();
-  return DEBT_SERVICE_PATTERNS.some((p) => lower.includes(p));
+  return patterns.some((p) => lower.includes(p));
 }
 
-function isOwnerDraw(accountRef: string | null): boolean {
+function isOwnerDraw(
+  accountRef: string | null,
+  patterns: string[] = OWNER_DRAW_PATTERNS
+): boolean {
   if (!accountRef) return false;
   const lower = accountRef.toLowerCase();
-  return OWNER_DRAW_PATTERNS.some((p) => lower.includes(p));
+  return patterns.some((p) => lower.includes(p));
 }
 
 const latestCatId = sql`(
@@ -76,6 +83,11 @@ export async function calculateFreeCashFlow(
   startDate.setDate(1);
   startDate.setHours(0, 0, 0, 0);
   const endDate = new Date();
+
+  // Load industry config for debt service and owner draw patterns
+  const industryConfig = await getConfigForPractice(practiceId);
+  const debtPatterns = industryConfig.debtServicePatterns;
+  const drawPatterns = industryConfig.ownerDrawPatterns;
 
   // Get practice reserve threshold
   const [practice] = await db
@@ -146,7 +158,7 @@ export async function calculateFreeCashFlow(
     const m = monthlyMap.get(month)!;
 
     if (row.category === "personal") {
-      if (amount > 0 || isOwnerDraw(row.accountRef)) {
+      if (amount > 0 || isOwnerDraw(row.accountRef, drawPatterns)) {
         // Personal income (owner draws are positive from personal perspective)
         const inc = Math.abs(amount);
         m.personalIncome += inc;
@@ -163,10 +175,10 @@ export async function calculateFreeCashFlow(
         totalBizRevenue += amount;
       } else {
         const absAmt = Math.abs(amount);
-        if (isDebtService(row.accountRef)) {
+        if (isDebtService(row.accountRef, debtPatterns)) {
           m.debtService += absAmt;
           totalDebtService += absAmt;
-        } else if (isOwnerDraw(row.accountRef)) {
+        } else if (isOwnerDraw(row.accountRef, drawPatterns)) {
           // Owner draws are personal income from business
           m.personalIncome += absAmt;
           totalPersonalIncome += absAmt;

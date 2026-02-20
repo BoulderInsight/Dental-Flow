@@ -3,12 +3,14 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { useReviewStore } from "@/lib/store/review-store";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
 import { X } from "lucide-react";
 
 export function BatchActionBar() {
   const queryClient = useQueryClient();
   const { selectedTransactionIds, clearBatchSelection } = useReviewStore();
+  const { canWrite } = usePermissions();
 
   const mutation = useMutation({
     mutationFn: async (category: string) => {
@@ -31,7 +33,7 @@ export function BatchActionBar() {
     onError: () => toast.error("Batch categorization failed"),
   });
 
-  if (selectedTransactionIds.length === 0) return null;
+  if (!canWrite || selectedTransactionIds.length === 0) return null;
 
   return (
     <div className="fixed bottom-10 left-1/2 z-50 -translate-x-1/2 rounded-lg border bg-card px-4 py-3 shadow-lg">

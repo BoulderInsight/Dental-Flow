@@ -3,6 +3,7 @@ import { getSessionOrDemo } from "@/lib/auth/session";
 import { calculateProfitability } from "@/lib/finance/profitability";
 import { calculateFreeCashFlow } from "@/lib/finance/cash-flow";
 import { calculateBudgetVsActual, getBudget } from "@/lib/finance/budget";
+import { generateMonthlyReport } from "@/lib/export/pdf-report";
 
 export async function GET(request: NextRequest) {
   try {
@@ -40,7 +41,21 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    return NextResponse.json({ error: "Only CSV format is currently supported" }, { status: 400 });
+    if (format === "pdf") {
+      const pdfBuffer = await generateMonthlyReport(
+        session.practiceId,
+        startDate,
+        endDate
+      );
+      return new NextResponse(new Uint8Array(pdfBuffer), {
+        headers: {
+          "Content-Type": "application/pdf",
+          "Content-Disposition": `attachment; filename="dentalflow-report-${now.toISOString().slice(0, 10)}.pdf"`,
+        },
+      });
+    }
+
+    return NextResponse.json({ error: "Unsupported format. Use csv or pdf." }, { status: 400 });
   } catch (error) {
     console.error("Export error:", error);
     return NextResponse.json(

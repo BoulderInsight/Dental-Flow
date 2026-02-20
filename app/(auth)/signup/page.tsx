@@ -7,6 +7,15 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
+
+const INDUSTRY_OPTIONS = [
+  { value: "dental", label: "Dental Practice" },
+  { value: "chiropractic", label: "Chiropractic Office" },
+  { value: "veterinary", label: "Veterinary Clinic" },
+  { value: "general", label: "General Small Business" },
+  { value: "other", label: "Other" },
+];
 
 export default function SignupPage() {
   const router = useRouter();
@@ -14,6 +23,8 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [practiceName, setPracticeName] = useState("");
+  const [industry, setIndustry] = useState("dental");
+  const [customIndustry, setCustomIndustry] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -26,7 +37,13 @@ export default function SignupPage() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password, practiceName }),
+        body: JSON.stringify({
+          name,
+          email,
+          password,
+          practiceName,
+          industry: industry === "other" ? "other" : industry,
+        }),
       });
 
       if (!res.ok) {
@@ -42,6 +59,19 @@ export default function SignupPage() {
         password,
         redirect: false,
       });
+
+      // If "Other" was selected, generate a custom industry config after signup
+      if (industry === "other" && customIndustry.trim()) {
+        try {
+          await fetch("/api/industry/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ industryName: customIndustry.trim() }),
+          });
+        } catch {
+          // Non-critical — industry generation can be retried later
+        }
+      }
 
       setLoading(false);
 
@@ -85,6 +115,48 @@ export default function SignupPage() {
             />
           </div>
           <div className="space-y-2">
+            <label htmlFor="practiceName" className="text-sm font-medium">
+              Practice Name
+            </label>
+            <Input
+              id="practiceName"
+              value={practiceName}
+              onChange={(e) => setPracticeName(e.target.value)}
+              placeholder="Sunny Valley Dental"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <label htmlFor="industry" className="text-sm font-medium">
+              Industry
+            </label>
+            <Select
+              id="industry"
+              value={industry}
+              onChange={(e) => setIndustry(e.target.value)}
+            >
+              {INDUSTRY_OPTIONS.map((opt) => (
+                <option key={opt.value} value={opt.value}>
+                  {opt.label}
+                </option>
+              ))}
+            </Select>
+          </div>
+          {industry === "other" && (
+            <div className="space-y-2">
+              <label htmlFor="customIndustry" className="text-sm font-medium">
+                Describe Your Business Type
+              </label>
+              <Input
+                id="customIndustry"
+                value={customIndustry}
+                onChange={(e) => setCustomIndustry(e.target.value)}
+                placeholder="e.g. Optometry Practice, Plumbing Company"
+                required
+              />
+            </div>
+          )}
+          <div className="space-y-2">
             <label htmlFor="email" className="text-sm font-medium">
               Email
             </label>
@@ -109,18 +181,6 @@ export default function SignupPage() {
               placeholder="Min. 8 characters"
               required
               minLength={8}
-            />
-          </div>
-          <div className="space-y-2">
-            <label htmlFor="practiceName" className="text-sm font-medium">
-              Practice Name
-            </label>
-            <Input
-              id="practiceName"
-              value={practiceName}
-              onChange={(e) => setPracticeName(e.target.value)}
-              placeholder="Sunny Valley Dental"
-              required
             />
           </div>
           {error && (

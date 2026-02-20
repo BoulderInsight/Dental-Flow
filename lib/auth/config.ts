@@ -3,8 +3,8 @@ import Credentials from "next-auth/providers/credentials";
 import { z } from "zod";
 import bcrypt from "bcryptjs";
 import { db } from "@/lib/db";
-import { users } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { users, userPractices } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
@@ -49,10 +49,53 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
     }),
   ],
   callbacks: {
-    jwt({ token, user }) {
+    async jwt({ token, user }) {
       if (user) {
-        token.practiceId = (user as { practiceId: string }).practiceId;
-        token.role = (user as { role: string }).role;
+        // Resolve default practice from userPractices join table
+        const [defaultPractice] = await db
+          .select({
+            practiceId: userPractices.practiceId,
+            role: userPractices.role,
+          })
+          .from(userPractices)
+          .where(
+            and(
+              eq(userPractices.userId, user.id as string),
+              eq(userPractices.isDefault, true)
+            )
+          )
+          .limit(1);
+
+        if (defaultPractice) {
+          token.practiceId = defaultPractice.practiceId;
+          token.role = defaultPractice.role;
+        } else {
+          // Fallback: pick first practice membership
+          const [anyPractice] = await db
+            .select({
+              practiceId: userPractices.practiceId,
+              role: userPractices.role,
+            })
+            .from(userPractices)
+            .where(eq(userPractices.userId, user.id as string))
+            .limit(1);
+
+          if (anyPractice) {
+            token.practiceId = anyPractice.practiceId;
+            token.role = anyPractice.role;
+          } else {
+            // Legacy fallback: read from users table
+            const [legacyUser] = await db
+              .select({ practiceId: users.practiceId, role: users.role })
+              .from(users)
+              .where(eq(users.id, user.id as string))
+              .limit(1);
+            if (legacyUser) {
+              token.practiceId = legacyUser.practiceId;
+              token.role = legacyUser.role;
+            }
+          }
+        }
       }
       return token;
     },

@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { CashFlowChart } from "@/components/dashboard/cash-flow-chart";
 import { TopCategories } from "@/components/dashboard/top-categories";
 import { QuickActions } from "@/components/dashboard/quick-actions";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import {
   Receipt,
   CheckCircle,
@@ -13,6 +14,7 @@ import {
   HelpCircle,
   DollarSign,
   ArrowRight,
+  Info,
 } from "lucide-react";
 import Link from "next/link";
 import { cn } from "@/lib/utils";
@@ -46,6 +48,7 @@ function overheadColor(ratio: number): string {
 }
 
 export default function DashboardPage() {
+  const { canWrite, role } = usePermissions();
   const { data, isLoading } = useQuery<DashboardData>({
     queryKey: ["dashboard"],
     queryFn: async () => {
@@ -96,6 +99,12 @@ export default function DashboardPage() {
 
   return (
     <div className="p-6 space-y-6">
+      {role === "accountant" && (
+        <div className="flex items-center gap-2 rounded-lg bg-blue-950/50 border border-blue-400/30 px-4 py-3 text-sm text-blue-300">
+          <Info size={16} className="shrink-0" />
+          Viewing as Accountant (read-only)
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Dashboard</h1>
@@ -104,7 +113,7 @@ export default function DashboardPage() {
           </p>
         </div>
         <div className="flex items-center gap-3">
-          <QuickActions />
+          {canWrite && <QuickActions />}
           {data?.qboConnected === false && (
             <Badge variant="outline" className="text-yellow-500 border-yellow-500">
               Demo Mode

@@ -7,6 +7,7 @@ import {
 } from "@/lib/db/schema";
 import { eq, isNull, and } from "drizzle-orm";
 import { categorizeTransaction } from "./rules";
+import { getConfigForPractice } from "@/lib/industries";
 
 interface CategorizationResult {
   categorized: number;
@@ -16,10 +17,14 @@ interface CategorizationResult {
 
 /**
  * Run Tier 1 rule engine on all uncategorized transactions for a practice.
+ * Loads the practice's industry config and passes it to the categorization rules.
  */
 export async function categorizeUncategorized(
   practiceId: string
 ): Promise<CategorizationResult> {
+  // Load the practice's industry config
+  const config = await getConfigForPractice(practiceId);
+
   // Get user rules for this practice
   const rules = await db
     .select()
@@ -60,7 +65,8 @@ export async function categorizeUncategorized(
         amount: txn.amount,
         accountRef: txn.accountRef,
       },
-      rules as UserRule[]
+      rules as UserRule[],
+      config
     );
 
     if (result) {

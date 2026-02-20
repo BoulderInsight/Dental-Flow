@@ -9,6 +9,7 @@ import {
 } from "@tanstack/react-table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { usePermissions } from "@/lib/hooks/use-permissions";
 import { toast } from "sonner";
 import { Trash2 } from "lucide-react";
 
@@ -23,6 +24,7 @@ interface Rule {
 
 export default function RulesPage() {
   const queryClient = useQueryClient();
+  const { canWrite } = usePermissions();
 
   const { data: rules = [], isLoading } = useQuery<Rule[]>({
     queryKey: ["rules"],
@@ -93,20 +95,24 @@ export default function RulesPage() {
         </span>
       ),
     },
-    {
-      id: "actions",
-      header: "",
-      cell: ({ row }) => (
-        <Button
-          size="sm"
-          variant="ghost"
-          onClick={() => deleteMutation.mutate(row.original.id)}
-          disabled={deleteMutation.isPending}
-        >
-          <Trash2 size={14} className="text-red-400" />
-        </Button>
-      ),
-    },
+    ...(canWrite
+      ? [
+          {
+            id: "actions",
+            header: "",
+            cell: ({ row }: { row: { original: Rule } }) => (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={() => deleteMutation.mutate(row.original.id)}
+                disabled={deleteMutation.isPending}
+              >
+                <Trash2 size={14} className="text-red-400" />
+              </Button>
+            ),
+          },
+        ]
+      : []),
   ];
 
   const table = useReactTable({
@@ -118,10 +124,18 @@ export default function RulesPage() {
   return (
     <div className="p-6 space-y-6">
       <div>
-        <h1 className="text-2xl font-bold">Categorization Rules</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl font-bold">Categorization Rules</h1>
+          {!canWrite && (
+            <Badge variant="outline" className="text-blue-400 border-blue-400/30">
+              Read Only
+            </Badge>
+          )}
+        </div>
         <p className="text-muted-foreground mt-1">
-          Manage auto-categorization rules for your practice. Rules are checked
-          before all other matching logic.
+          {canWrite
+            ? "Manage auto-categorization rules for your practice. Rules are checked before all other matching logic."
+            : "Viewing auto-categorization rules. Rules are checked before all other matching logic."}
         </p>
       </div>
 

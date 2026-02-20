@@ -1,6 +1,8 @@
 import { db } from "@/lib/db";
 import { transactions, categorizations, forecasts } from "@/lib/db/schema";
 import { eq, and, gte, sql } from "drizzle-orm";
+import type { IndustryConfig } from "@/lib/industries/types";
+import { getConfigForPractice } from "@/lib/industries";
 
 export interface ForecastResult {
   historicalMonths: Array<{ month: string; actual: number }>;
@@ -20,7 +22,7 @@ export interface ForecastResult {
   seasonalityIndices: number[];
 }
 
-// Default dental seasonality indices (refined from actual data when available)
+// Default dental seasonality indices (kept for backward compatibility)
 const DEFAULT_SEASONALITY: number[] = [
   1.05, // Jan - benefit reset
   1.0, // Feb
@@ -43,12 +45,13 @@ function holtWinters(
   beta: number,
   gamma: number,
   seasonLength: number,
-  forecastPeriods: number
+  forecastPeriods: number,
+  configSeasonality?: number[]
 ): { forecast: number[]; level: number; trend: number; seasonal: number[] } {
   const n = data.length;
   if (n < seasonLength * 2) {
     // Not enough data for full seasonal decomposition — use simple projection
-    return simpleProjection(data, forecastPeriods, seasonLength);
+    return simpleProjection(data, forecastPeriods, seasonLength, configSeasonality);
   }
 
   // Initialize level and trend from first two seasons
@@ -109,7 +112,8 @@ function holtWinters(
 function simpleProjection(
   data: number[],
   periods: number,
-  seasonLength: number
+  seasonLength: number,
+  configSeasonality?: number[]
 ): { forecast: number[]; level: number; trend: number; seasonal: number[] } {
   const n = data.length;
   const avg = data.reduce((s, v) => s + v, 0) / n;
@@ -128,8 +132,8 @@ function simpleProjection(
   const trend = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX || 1);
   const level = avg;
 
-  // Use default seasonality
-  const seasonal = [...DEFAULT_SEASONALITY];
+  // Use config seasonality if provided, otherwise fall back to default
+  const seasonal = [...(configSeasonality || DEFAULT_SEASONALITY)];
 
   const forecast: number[] = [];
   for (let h = 1; h <= periods; h++) {
@@ -158,6 +162,9 @@ export async function calculateForecast(
   practiceId: string,
   forecastMonths: number = 6
 ): Promise<ForecastResult> {
+  // Load practice's industry config for seasonality
+  const industryConfig = await getConfigForPractice(practiceId);
+
   // Get 24 months of historical data
   const startDate = new Date();
   startDate.setMonth(startDate.getMonth() - 24);
@@ -231,7 +238,8 @@ export async function calculateForecast(
     beta,
     gamma,
     seasonLength,
-    forecastMonths
+    forecastMonths,
+    industryConfig.seasonality
   );
 
   // Calculate sigma for confidence intervals

@@ -1,7 +1,8 @@
 import { auth } from "./config";
 import { isDemoMode } from "@/lib/qbo/demo-mode";
 import { db } from "@/lib/db";
-import { practices } from "@/lib/db/schema";
+import { practices, userPractices } from "@/lib/db/schema";
+import { eq, and } from "drizzle-orm";
 
 export interface AppSession {
   userId: string;
@@ -43,4 +44,31 @@ export async function getSessionOrDemo(): Promise<AppSession | null> {
     email: session.user.email!,
     name: session.user.name!,
   };
+}
+
+/**
+ * Verifies a user has access to a practice and returns their role.
+ * Does NOT modify the JWT directly — the API route handles session refresh.
+ */
+export async function switchPractice(
+  userId: string,
+  practiceId: string
+): Promise<{ practiceId: string; role: string } | null> {
+  const [membership] = await db
+    .select({
+      practiceId: userPractices.practiceId,
+      role: userPractices.role,
+    })
+    .from(userPractices)
+    .where(
+      and(
+        eq(userPractices.userId, userId),
+        eq(userPractices.practiceId, practiceId)
+      )
+    )
+    .limit(1);
+
+  if (!membership) return null;
+
+  return { practiceId: membership.practiceId, role: membership.role };
 }

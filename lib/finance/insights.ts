@@ -5,6 +5,15 @@ export interface Insight {
   text: string;
 }
 
+export interface InsightBenchmarks {
+  overheadRatio: {
+    healthy: number;
+    target: [number, number];
+    elevated: number;
+    critical: number;
+  };
+}
+
 export function generateInsights(data: {
   overheadRatio: number;
   excessCash: number;
@@ -14,31 +23,39 @@ export function generateInsights(data: {
   trend?: "improving" | "stable" | "declining";
   seasonalDipMonth?: string;
   seasonalDipPct?: number;
+  benchmarks?: InsightBenchmarks;
+  industryName?: string;
 }): Insight[] {
   const insights: Insight[] = [];
-  const status = getOverheadStatus(data.overheadRatio);
+  const b = data.benchmarks;
+  const status = getOverheadStatus(data.overheadRatio, b ? { overheadRatio: b.overheadRatio } : undefined);
+
+  const healthyPct = Math.round((b?.overheadRatio.healthy ?? 0.55) * 100);
+  const targetMaxPct = Math.round((b?.overheadRatio.target?.[1] ?? 0.65) * 100);
+  const criticalPct = Math.round((b?.overheadRatio.elevated ?? 0.75) * 100);
+  const industryLabel = data.industryName || "dental practices";
 
   // Overhead ratio insight
   const pct = Math.round(data.overheadRatio * 100);
   if (status === "healthy") {
     insights.push({
       type: "success",
-      text: `Your overhead ratio is ${pct}% — below the 55% benchmark. Excellent cost control.`,
+      text: `Your overhead ratio is ${pct}% — below the ${healthyPct}% benchmark. Excellent cost control.`,
     });
   } else if (status === "normal") {
     insights.push({
       type: "info",
-      text: `Your overhead ratio is ${pct}% — within the healthy range for dental practices (55–65%).`,
+      text: `Your overhead ratio is ${pct}% — within the healthy range for ${industryLabel} (${healthyPct}–${targetMaxPct}%).`,
     });
   } else if (status === "elevated") {
     insights.push({
       type: "warning",
-      text: `Your overhead ratio is ${pct}% — above the 65% target. Review your top expense categories for savings.`,
+      text: `Your overhead ratio is ${pct}% — above the ${targetMaxPct}% target. Review your top expense categories for savings.`,
     });
   } else {
     insights.push({
       type: "warning",
-      text: `Your overhead ratio is ${pct}% — significantly above the 75% critical threshold. Immediate attention needed.`,
+      text: `Your overhead ratio is ${pct}% — significantly above the ${criticalPct}% critical threshold. Immediate attention needed.`,
     });
   }
 

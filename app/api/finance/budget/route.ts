@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getSessionOrDemo } from "@/lib/auth/session";
+import { requireRole, PermissionError } from "@/lib/auth/permissions";
 import {
   getBudget,
   saveBudget,
@@ -52,6 +53,15 @@ export async function PUT(request: NextRequest) {
     const session = await getSessionOrDemo();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    try {
+      requireRole(session, "write");
+    } catch (e) {
+      if (e instanceof PermissionError) {
+        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+      }
+      throw e;
     }
 
     const body = await request.json();

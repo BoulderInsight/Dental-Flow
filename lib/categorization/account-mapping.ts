@@ -1,3 +1,5 @@
+import type { IndustryConfig } from "@/lib/industries/types";
+
 export interface AccountMappingResult {
   category: "business" | "personal" | "ambiguous";
   confidence: number;
@@ -78,6 +80,50 @@ export function categorizeByAccount(
   }
 
   if (AMBIGUOUS_ACCOUNTS.has(lower)) {
+    return {
+      category: "ambiguous",
+      confidence: 50,
+      reasoning: `QBO account "${accountRef}" is ambiguous — could be business or personal`,
+    };
+  }
+
+  return null;
+}
+
+/**
+ * Categorize a transaction based on its QBO account reference using an IndustryConfig.
+ * Falls back to the original hardcoded function if no config provided.
+ */
+export function categorizeByAccountWithConfig(
+  accountRef: string | null,
+  config: IndustryConfig
+): AccountMappingResult | null {
+  if (!accountRef) return null;
+
+  const lower = accountRef.toLowerCase();
+  const mappings = config.accountMappings;
+
+  const businessSet = new Set(mappings.business.map((a) => a.toLowerCase()));
+  const personalSet = new Set(mappings.personal.map((a) => a.toLowerCase()));
+  const ambiguousSet = new Set(mappings.ambiguous.map((a) => a.toLowerCase()));
+
+  if (businessSet.has(lower)) {
+    return {
+      category: "business",
+      confidence: 95,
+      reasoning: `QBO account "${accountRef}" is a known business account`,
+    };
+  }
+
+  if (personalSet.has(lower)) {
+    return {
+      category: "personal",
+      confidence: 90,
+      reasoning: `QBO account "${accountRef}" is a known personal account`,
+    };
+  }
+
+  if (ambiguousSet.has(lower)) {
     return {
       category: "ambiguous",
       confidence: 50,

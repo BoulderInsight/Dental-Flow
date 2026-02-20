@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { categorizations } from "@/lib/db/schema";
 import { getSessionOrDemo } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/audit/logger";
+import { requireRole, PermissionError } from "@/lib/auth/permissions";
 
 const batchSchema = z.object({
   transactionIds: z.array(z.string().uuid()).min(1).max(200),
@@ -15,6 +16,15 @@ export async function POST(request: NextRequest) {
     const session = await getSessionOrDemo();
     if (!session) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    try {
+      requireRole(session, "write");
+    } catch (e) {
+      if (e instanceof PermissionError) {
+        return NextResponse.json({ error: "Insufficient permissions" }, { status: 403 });
+      }
+      throw e;
     }
 
     const body = await request.json();

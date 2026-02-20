@@ -1,5 +1,9 @@
+import type { IndustryConfig } from "@/lib/industries/types";
+import { dentalConfig } from "@/lib/industries/dental";
+
 // Known vendor lists for Tier 1 deterministic categorization.
 // Add new vendors as single-line entries — first match wins.
+// These legacy exports are kept for backward compatibility and default to dental.
 
 export const DENTAL_SUPPLY_VENDORS = [
   "Henry Schein",
@@ -105,3 +109,24 @@ export const AMBIGUOUS_RETAIL = [
   "Best Buy",
   "Apple Store",
 ];
+
+export interface VendorLists {
+  business: string[];
+  personal: string[];
+  ambiguous: string[];
+  patterns: string[];
+}
+
+/**
+ * Get structured vendor lists from an IndustryConfig.
+ * Defaults to dental config if no config provided.
+ */
+export function getVendorLists(config?: IndustryConfig): VendorLists {
+  const c = config || dentalConfig;
+  return {
+    business: c.vendors.business,
+    personal: c.vendors.personal,
+    ambiguous: c.vendors.ambiguous,
+    patterns: c.vendors.patterns,
+  };
+}

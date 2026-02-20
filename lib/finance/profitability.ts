@@ -37,11 +37,24 @@ const OWNER_ACCOUNT_REFS = [
 ];
 
 export function getOverheadStatus(
-  ratio: number
+  ratio: number,
+  benchmarks?: {
+    overheadRatio: {
+      healthy: number;
+      target: [number, number];
+      elevated: number;
+      critical: number;
+    };
+  }
 ): "healthy" | "normal" | "elevated" | "critical" {
-  if (ratio < 0.55) return "healthy";
-  if (ratio <= 0.65) return "normal";
-  if (ratio <= 0.75) return "elevated";
+  const b = benchmarks?.overheadRatio;
+  const healthyThreshold = b?.healthy ?? 0.55;
+  const targetMax = b?.target?.[1] ?? 0.65;
+  const elevatedThreshold = b?.elevated ?? 0.75;
+
+  if (ratio < healthyThreshold) return "healthy";
+  if (ratio <= targetMax) return "normal";
+  if (ratio <= elevatedThreshold) return "elevated";
   return "critical";
 }
 

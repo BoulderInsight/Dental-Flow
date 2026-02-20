@@ -1,4 +1,5 @@
 import type { UserRule } from "@/lib/db/schema";
+import type { IndustryConfig } from "@/lib/industries/types";
 import {
   DENTAL_SUPPLY_VENDORS,
   DENTAL_LAB_VENDORS,
@@ -9,7 +10,7 @@ import {
   PERSONAL_PATTERNS,
   AMBIGUOUS_RETAIL,
 } from "./vendors";
-import { categorizeByAccount } from "./account-mapping";
+import { categorizeByAccount, categorizeByAccountWithConfig } from "./account-mapping";
 
 export interface RuleResult {
   category: "business" | "personal" | "ambiguous";
@@ -40,10 +41,13 @@ function matchesPattern(vendorName: string, patterns: string[]): string | null {
 /**
  * Run Tier 1 deterministic rules against a transaction.
  * Rules are evaluated in priority order — first match wins.
+ * When an IndustryConfig is provided, uses config-based vendor/pattern matching.
+ * Without a config, falls back to hardcoded dental vendors for backward compatibility.
  */
 export function categorizeTransaction(
   txn: TransactionInput,
-  userRules: UserRule[] = []
+  userRules: UserRule[] = [],
+  config?: IndustryConfig
 ): RuleResult | null {
   const vendor = txn.vendorName || "";
   const desc = txn.description || "";
@@ -80,7 +84,9 @@ export function categorizeTransaction(
   }
 
   // Priority 2: QBO account mapping — business/personal (bookkeeper's intent)
-  const accountResult = categorizeByAccount(txn.accountRef);
+  const accountResult = config
+    ? categorizeByAccountWithConfig(txn.accountRef, config)
+    : categorizeByAccount(txn.accountRef);
   if (accountResult && accountResult.category !== "ambiguous") {
     return {
       category: accountResult.category,
@@ -90,6 +96,100 @@ export function categorizeTransaction(
     };
   }
 
+  // Use industry config if available, otherwise use hardcoded dental lists
+  if (config) {
+    return categorizeWithConfig(vendor, combined, accountResult, config);
+  }
+
+  return categorizeWithLegacy(vendor, combined, accountResult);
+}
+
+/** Config-based categorization using IndustryConfig vendor/pattern lists */
+function categorizeWithConfig(
+  vendor: string,
+  combined: string,
+  accountResult: { category: "business" | "personal" | "ambiguous"; confidence: number; reasoning: string } | null,
+  config: IndustryConfig
+): RuleResult | null {
+  // Priority 3: Ambiguous vendors — always flag
+  if (matchesVendor(vendor, config.vendors.ambiguous)) {
+    return {
+      category: "ambiguous",
+      confidence: 40,
+      ruleId: null,
+      reasoning: `Ambiguous retail vendor: ${vendor} — requires manual review`,
+    };
+  }
+
+  // Priority 4: Business vendors (100% confidence)
+  const businessMatch = matchesVendor(vendor, config.vendors.business);
+  if (businessMatch) {
+    return {
+      category: "business",
+      confidence: 100,
+      ruleId: null,
+      reasoning: `Known business vendor: ${businessMatch}`,
+    };
+  }
+
+  // Priority 5: Business pattern match (95% confidence)
+  const businessPatterns = config.vendors.patterns.filter(
+    (p) => !["gym", "fitness", "meal kit", "streaming"].includes(p.toLowerCase())
+  );
+  const bizPattern = matchesPattern(combined, businessPatterns);
+  if (bizPattern) {
+    return {
+      category: "business",
+      confidence: 95,
+      ruleId: null,
+      reasoning: `Vendor matches business pattern: "${bizPattern}"`,
+    };
+  }
+
+  // Priority 6: Personal vendors (95% confidence)
+  const personalMatch = matchesVendor(vendor, config.vendors.personal);
+  if (personalMatch) {
+    return {
+      category: "personal",
+      confidence: 95,
+      ruleId: null,
+      reasoning: `Known personal vendor: ${personalMatch}`,
+    };
+  }
+
+  // Priority 7: Personal patterns (85% confidence)
+  const personalPatterns = config.vendors.patterns.filter(
+    (p) => ["gym", "fitness", "meal kit", "streaming"].includes(p.toLowerCase())
+  );
+  const persPattern = matchesPattern(combined, personalPatterns);
+  if (persPattern) {
+    return {
+      category: "personal",
+      confidence: 85,
+      ruleId: null,
+      reasoning: `Matches personal pattern: "${persPattern}"`,
+    };
+  }
+
+  // Priority 8: QBO ambiguous account mapping — catch-all before giving up
+  if (accountResult && accountResult.category === "ambiguous") {
+    return {
+      category: accountResult.category,
+      confidence: accountResult.confidence,
+      ruleId: null,
+      reasoning: accountResult.reasoning,
+    };
+  }
+
+  return null;
+}
+
+/** Legacy categorization using hardcoded dental vendor lists */
+function categorizeWithLegacy(
+  vendor: string,
+  combined: string,
+  accountResult: { category: "business" | "personal" | "ambiguous"; confidence: number; reasoning: string } | null
+): RuleResult | null {
   // Priority 3: Ambiguous retail — always flag (check before other matches)
   if (matchesVendor(vendor, AMBIGUOUS_RETAIL)) {
     return {
