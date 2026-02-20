@@ -35,6 +35,8 @@ export const reviewStatusEnum = pgEnum("review_status", [
   "completed",
 ]);
 
+export const roleEnum = pgEnum("role", ["owner", "manager", "accountant"]);
+
 // Tables
 
 export const practices = pgTable("practices", {
@@ -47,6 +49,79 @@ export const practices = pgTable("practices", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
+
+export const users = pgTable(
+  "users",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    email: text("email").notNull(),
+    name: text("name").notNull(),
+    passwordHash: text("password_hash").notNull(),
+    role: roleEnum("role").default("owner").notNull(),
+    emailVerified: timestamp("email_verified"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("users_email_idx").on(table.email),
+    index("users_practice_idx").on(table.practiceId),
+  ]
+);
+
+// NextAuth adapter tables
+export const accounts = pgTable(
+  "accounts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    type: text("type").notNull(),
+    provider: text("provider").notNull(),
+    providerAccountId: text("provider_account_id").notNull(),
+    refreshToken: text("refresh_token"),
+    accessToken: text("access_token"),
+    expiresAt: integer("expires_at"),
+    tokenType: text("token_type"),
+    scope: text("scope"),
+    idToken: text("id_token"),
+    sessionState: text("session_state"),
+  },
+  (table) => [
+    uniqueIndex("accounts_provider_idx").on(
+      table.provider,
+      table.providerAccountId
+    ),
+  ]
+);
+
+export const sessions = pgTable(
+  "sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    sessionToken: text("session_token").notNull(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    expires: timestamp("expires").notNull(),
+  },
+  (table) => [uniqueIndex("sessions_token_idx").on(table.sessionToken)]
+);
+
+export const verificationTokens = pgTable(
+  "verification_tokens",
+  {
+    identifier: text("identifier").notNull(),
+    token: text("token").notNull(),
+    expires: timestamp("expires").notNull(),
+  },
+  (table) => [
+    uniqueIndex("verification_tokens_idx").on(table.identifier, table.token),
+  ]
+);
 
 export const transactions = pgTable(
   "transactions",
@@ -113,7 +188,7 @@ export const reviewSessions = pgTable(
     practiceId: uuid("practice_id")
       .references(() => practices.id, { onDelete: "cascade" })
       .notNull(),
-    userId: text("user_id").notNull(),
+    userId: uuid("user_id").references(() => users.id),
     periodStart: timestamp("period_start").notNull(),
     periodEnd: timestamp("period_end").notNull(),
     status: reviewStatusEnum("status").default("in_progress").notNull(),
@@ -134,7 +209,28 @@ export const forecasts = pgTable("forecasts", {
   resultsJson: jsonb("results_json"),
 });
 
-// Type exports for use in application code
+export const auditLog = pgTable(
+  "audit_log",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    userId: uuid("user_id").references(() => users.id),
+    action: text("action").notNull(),
+    entityType: text("entity_type").notNull(),
+    entityId: text("entity_id"),
+    oldValue: jsonb("old_value"),
+    newValue: jsonb("new_value"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("audit_practice_idx").on(table.practiceId),
+    index("audit_entity_idx").on(table.entityType, table.entityId),
+  ]
+);
+
+// Type exports
 export type Practice = typeof practices.$inferSelect;
 export type NewPractice = typeof practices.$inferInsert;
 export type Transaction = typeof transactions.$inferSelect;
@@ -145,3 +241,7 @@ export type UserRule = typeof userRules.$inferSelect;
 export type NewUserRule = typeof userRules.$inferInsert;
 export type ReviewSession = typeof reviewSessions.$inferSelect;
 export type Forecast = typeof forecasts.$inferSelect;
+export type User = typeof users.$inferSelect;
+export type NewUser = typeof users.$inferInsert;
+export type AuditLogEntry = typeof auditLog.$inferSelect;
+export type NewAuditLogEntry = typeof auditLog.$inferInsert;

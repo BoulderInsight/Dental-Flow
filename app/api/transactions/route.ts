@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { transactions, categorizations, practices } from "@/lib/db/schema";
+import { transactions, categorizations } from "@/lib/db/schema";
 import { eq, desc, asc, and, ilike, gte, lte, sql } from "drizzle-orm";
+import { getSessionOrDemo } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
 
-  const practiceId = searchParams.get("practiceId");
   const page = parseInt(searchParams.get("page") || "1");
   const limit = Math.min(parseInt(searchParams.get("limit") || "50"), 100);
   const sortBy = searchParams.get("sortBy") || "date";
@@ -19,15 +19,18 @@ export async function GET(request: NextRequest) {
   const maxConfidence = searchParams.get("maxConfidence");
 
   try {
-    // If no practiceId, find first practice (demo mode convenience)
-    let resolvedPracticeId = practiceId;
-    if (!resolvedPracticeId) {
-      const [practice] = await db.select({ id: practices.id }).from(practices).limit(1);
-      if (!practice) {
-        return NextResponse.json({ transactions: [], total: 0 });
-      }
-      resolvedPracticeId = practice.id;
+    const session = await getSessionOrDemo();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
+    const resolvedPracticeId = session.practiceId;
+
+    // Correlated subquery: get latest categorization per transaction
+    const latestCatId = sql`(
+      SELECT c.id FROM categorizations c
+      WHERE c.transaction_id = transactions.id
+      ORDER BY c.created_at DESC LIMIT 1
+    )`;
 
     // Build WHERE conditions
     const conditions = [eq(transactions.practiceId, resolvedPracticeId)];
@@ -41,26 +44,21 @@ export async function GET(request: NextRequest) {
     if (dateTo) {
       conditions.push(lte(transactions.date, new Date(dateTo)));
     }
+    // SQL-level category/confidence filtering
+    if (category) {
+      conditions.push(eq(categorizations.category, category as "business" | "personal" | "ambiguous"));
+    }
+    if (minConfidence) {
+      conditions.push(gte(categorizations.confidence, parseInt(minConfidence)));
+    }
+    if (maxConfidence) {
+      conditions.push(lte(categorizations.confidence, parseInt(maxConfidence)));
+    }
 
     const where = and(...conditions);
 
-    // Get total count
-    const [{ total }] = await db
-      .select({ total: sql<number>`count(*)::int` })
-      .from(transactions)
-      .where(where);
-
-    // Get transactions with their latest categorization
-    const offset = (page - 1) * limit;
-    const orderFn = sortDir === "asc" ? asc : desc;
-    const orderCol =
-      sortBy === "amount"
-        ? transactions.amount
-        : sortBy === "vendor"
-          ? transactions.vendorName
-          : transactions.date;
-
-    const txns = await db
+    // Build the base query with latest-categorization join
+    const baseFrom = db
       .select({
         id: transactions.id,
         practiceId: transactions.practiceId,
@@ -71,7 +69,6 @@ export async function GET(request: NextRequest) {
         description: transactions.description,
         accountRef: transactions.accountRef,
         syncedAt: transactions.syncedAt,
-        // Latest categorization
         categoryId: categorizations.id,
         category: categorizations.category,
         confidence: categorizations.confidence,
@@ -81,31 +78,45 @@ export async function GET(request: NextRequest) {
       .from(transactions)
       .leftJoin(
         categorizations,
-        eq(transactions.id, categorizations.transactionId)
+        and(
+          eq(transactions.id, categorizations.transactionId),
+          eq(categorizations.id, latestCatId)
+        )
+      );
+
+    // Count query with same join + filters
+    const [{ total }] = await db
+      .select({ total: sql<number>`count(*)::int` })
+      .from(transactions)
+      .leftJoin(
+        categorizations,
+        and(
+          eq(transactions.id, categorizations.transactionId),
+          eq(categorizations.id, latestCatId)
+        )
       )
+      .where(where);
+
+    // Data query
+    const offset = (page - 1) * limit;
+    const orderFn = sortDir === "asc" ? asc : desc;
+    const orderCol =
+      sortBy === "amount"
+        ? transactions.amount
+        : sortBy === "vendor"
+          ? transactions.vendorName
+          : sortBy === "confidence"
+            ? categorizations.confidence
+            : transactions.date;
+
+    const txns = await baseFrom
       .where(where)
       .orderBy(orderFn(orderCol))
       .limit(limit)
       .offset(offset);
 
-    // Post-filter by category/confidence if specified
-    let filtered = txns;
-    if (category) {
-      filtered = filtered.filter((t) => t.category === category);
-    }
-    if (minConfidence) {
-      filtered = filtered.filter(
-        (t) => t.confidence !== null && t.confidence >= parseInt(minConfidence)
-      );
-    }
-    if (maxConfidence) {
-      filtered = filtered.filter(
-        (t) => t.confidence === null || t.confidence <= parseInt(maxConfidence)
-      );
-    }
-
     return NextResponse.json({
-      transactions: filtered,
+      transactions: txns,
       total,
       page,
       limit,

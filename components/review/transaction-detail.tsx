@@ -1,5 +1,6 @@
 "use client";
 
+import { useQuery } from "@tanstack/react-query";
 import { Separator } from "@/components/ui/separator";
 import { CategoryBadge } from "./category-badge";
 import { CategoryActions } from "./category-actions";
@@ -17,11 +18,30 @@ interface TransactionData {
   reasoning: string | null;
 }
 
+interface HistoryEntry {
+  id: string;
+  category: string;
+  confidence: number;
+  source: string;
+  reasoning: string | null;
+  createdAt: string;
+}
+
 interface TransactionDetailProps {
   transaction: TransactionData | null;
 }
 
 export function TransactionDetail({ transaction }: TransactionDetailProps) {
+  const { data: history } = useQuery<HistoryEntry[]>({
+    queryKey: ["transaction-history", transaction?.id],
+    queryFn: async () => {
+      const res = await fetch(`/api/transactions/${transaction!.id}/history`);
+      if (!res.ok) return [];
+      return res.json();
+    },
+    enabled: !!transaction?.id,
+  });
+
   if (!transaction) {
     return (
       <div className="flex h-full items-center justify-center text-muted-foreground text-sm">
@@ -105,8 +125,40 @@ export function TransactionDetail({ transaction }: TransactionDetailProps) {
         <CategoryActions
           transactionId={transaction.id}
           currentCategory={transaction.category}
+          vendorName={transaction.vendorName}
         />
       </div>
+
+      {/* Categorization History */}
+      {history && history.length > 1 && (
+        <>
+          <Separator />
+          <div className="text-sm">
+            <span className="text-muted-foreground">History</span>
+            <div className="mt-2 space-y-2">
+              {history.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="flex items-start gap-2 rounded bg-muted/30 p-2 text-xs"
+                >
+                  <CategoryBadge
+                    category={entry.category}
+                    confidence={entry.confidence}
+                  />
+                  <div className="flex-1">
+                    <p className="text-muted-foreground">
+                      {entry.source} — {entry.reasoning || "No reason"}
+                    </p>
+                    <p className="text-muted-foreground/70">
+                      {new Date(entry.createdAt).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

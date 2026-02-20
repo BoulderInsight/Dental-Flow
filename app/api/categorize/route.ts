@@ -1,29 +1,15 @@
-import { NextRequest, NextResponse } from "next/server";
-import { db } from "@/lib/db";
-import { practices } from "@/lib/db/schema";
+import { NextResponse } from "next/server";
 import { categorizeUncategorized } from "@/lib/categorization/engine";
+import { getSessionOrDemo } from "@/lib/auth/session";
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
-    const body = await request.json().catch(() => ({}));
-    let practiceId = body.practiceId as string | undefined;
-
-    // If no practiceId, find first practice (demo mode convenience)
-    if (!practiceId) {
-      const [practice] = await db
-        .select({ id: practices.id })
-        .from(practices)
-        .limit(1);
-      if (!practice) {
-        return NextResponse.json(
-          { error: "No practice found" },
-          { status: 404 }
-        );
-      }
-      practiceId = practice.id;
+    const session = await getSessionOrDemo();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const result = await categorizeUncategorized(practiceId);
+    const result = await categorizeUncategorized(session.practiceId);
 
     return NextResponse.json({
       ...result,

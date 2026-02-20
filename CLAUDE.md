@@ -1,12 +1,12 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Claude Code when working with this repository. Read fully before making changes.
 
 ## Project Overview
 
-DentalFlow Pro is an interactive architecture visualization for a dental practice financial management system. It's currently a single-page React app that renders an SVG-based system architecture diagram with clickable components showing implementation details.
+DentalFlow Pro is a **multi-tenant personal CFO platform for dental practices** — not just a bookkeeping tool. It integrates with QuickBooks Online, automatically categorizes mixed business/personal transactions, and provides financial intelligence including cash flow forecasting, net worth tracking, debt capacity modeling, and tax strategy insights.
 
-The visualization documents the planned full system: QBO integration, sync engine, PostgreSQL/Redis data layer, 3-tier categorization (rules → ML → user feedback), transaction review UI, and cash flow forecasting. Only the architecture visualization component exists as code today — the backend services it describes are not yet implemented.
+Phase 1 is complete. The application is a Next.js 15 + TypeScript app with a working QBO OAuth integration, Tier 1 rule engine, seed data, and a transaction review UI.
 
 ## Commands
 
@@ -22,148 +22,209 @@ The visualization documents the planned full system: QBO integration, sync engin
 
 ## Tech Stack
 
-- React 19 with TypeScript
-- Next.js 15 (App Router)
-- Tailwind CSS + shadcn/ui components
-- Drizzle ORM + PostgreSQL 16
-- TanStack Query + TanStack Table
-- Zustand for client state
-- Docker Compose for local PostgreSQL + Redis
+- **Frontend:** React 19, TypeScript, Next.js 15 (App Router, Turbopack)
+- **Styling:** Tailwind CSS + shadcn/ui + Lucide icons
+- **Data fetching:** TanStack Query v5 + TanStack Table v8
+- **State:** Zustand v5
+- **Charts:** Recharts
+- **ORM:** Drizzle ORM + PostgreSQL 16
+- **QBO SDK:** intuit-oauth v4
+- **Cache/Queue:** Redis (ioredis)
+- **Local infra:** Docker Compose (Postgres + Redis)
 
-## Architecture
+## Code Structure
 
-- `app/` — Next.js App Router pages and API routes
-- `app/layout.tsx` — Root layout with sidebar nav + TanStack Query provider
-- `app/providers.tsx` — Client-side providers (QueryClient)
-- `app/api/` — API route handlers (QBO OAuth, transactions, categorization)
-- `components/ui/` — shadcn/ui primitives (button, card, badge, etc.)
-- `components/layout/sidebar.tsx` — App sidebar navigation
-- `components/review/` — Transaction review UI components
-- `components/qbo/` — QuickBooks connection components
-- `lib/db/` — Drizzle schema, connection, seed
-- `lib/qbo/` — QBO OAuth client, encryption, sync, demo mode
-- `lib/categorization/` — Tier 1 rule engine (vendors, rules, orchestrator)
-- `lib/store/` — Zustand stores
-- `src/DentalFlow_Architecture.jsx` — Preserved original architecture visualization (self-contained JSX with inline styles)
-
-## ESLint
-
-The `no-unused-vars` rule is configured to ignore variables starting with uppercase letters or underscores (`varsIgnorePattern: '^[A-Z_]'`).
-
-# Recommended additions to CLAUDE.md
-# Paste everything below the existing content
-# ─────────────────────────────────────────────
+```
+app/                          # Next.js App Router
+  layout.tsx                  # Root layout: sidebar + providers
+  page.tsx                    # Dashboard (placeholder — needs Phase 2 work)
+  providers.tsx               # TanStack Query provider
+  api/
+    qbo/connect/              # QBO OAuth initiation
+    qbo/callback/             # QBO OAuth callback + token storage
+    qbo/status/               # Connection status check
+    qbo/sync/                 # Full transaction sync trigger
+    qbo/webhook/              # Webhook receiver for incremental sync
+    transactions/             # GET: paginated, filtered transaction list
+    categorize/               # POST: run Tier 1 engine on uncategorized txns
+    categorize/[id]/          # PUT: user manual recategorization
+  review/                     # Review UI page
+  transactions/               # Transactions list page (placeholder)
+  forecast/                   # Forecast page (placeholder)
+  architecture/               # Architecture visualization (preserved from v0)
+components/
+  ui/                         # shadcn/ui primitives (button, card, badge, etc.)
+  layout/sidebar.tsx          # Collapsible sidebar nav
+  review/                     # Review panel, table, detail, filters, actions, progress
+  qbo/                        # QBO connection UI components
+lib/
+  db/schema.ts                # Drizzle schema (practices, transactions, categorizations, user_rules, review_sessions, forecasts)
+  db/seed.ts                  # 100 realistic dental transactions
+  db/index.ts                 # DB connection
+  qbo/client.ts               # Intuit OAuth client, token exchange, API calls
+  qbo/encryption.ts           # AES-256-GCM encrypt/decrypt for tokens
+  qbo/token-manager.ts        # Store/retrieve tokens with proactive 50-min refresh
+  qbo/sync.ts                 # Transaction sync pipeline with deduplication
+  qbo/demo-mode.ts            # Demo mode detection
+  categorization/vendors.ts   # Curated vendor lists (dental supply, lab, software, payroll, personal, ambiguous)
+  categorization/rules.ts     # Tier 1 deterministic rule engine with priority ordering
+  categorization/engine.ts    # Orchestrator: runs rules on uncategorized transactions
+  store/                      # Zustand stores
+  utils.ts                    # cn() utility for Tailwind merging
+types/                        # TypeScript type declarations
+src/DentalFlow_Architecture.jsx  # Original architecture visualization (preserved)
+```
 
 ## System Design Decisions (Authoritative)
 
-This section captures architectural decisions that have already been made. Do not deviate from these without explicit approval.
+Do not deviate from these without explicit approval.
+
+### Multi-Tenancy
+
+This is a multi-tenant SaaS product serving many dental practices. All data isolation is scoped to `practice_id`:
+- Every data table has a `practice_id` foreign key
+- Row-level security policies must be scoped to practice_id
+- QBO connections are per-practice (each has its own OAuth tokens + realm_id)
+- User rules are per-practice
+- Auth must support: practice owner, team members (office managers), and accountant (read-only) roles
 
 ### QuickBooks Online Integration
 
-- Use Intuit's OAuth 2.0 authorization code flow with scope `com.intuit.quickbooks.accounting`
-- Use the official `node-quickbooks` or Intuit Node.js SDK
-- Token storage: AES-256-GCM encrypted in PostgreSQL (never plaintext, never in .env)
-- Proactive token refresh: background job refreshes access tokens at the 50-minute mark (tokens expire at 60 min)
-- Refresh tokens rotate on each use per Intuit's rolling refresh policy (100-day lifetime)
-- On initial connect: full sync of last 12 months from Purchase, Deposit, Transfer, Account, Vendor endpoints
-- Ongoing sync: register a QBO webhook subscription for change events + daily batch reconciliation
-- Phase 1–2 is READ-ONLY from QBO. No write-back until Phase 3 (with preview + confirm safeguard)
-- Deduplicate by `qbo_txn_id` — always store raw JSON alongside parsed fields for audit trail
+- Intuit OAuth 2.0 authorization code flow, scope: `com.intuit.quickbooks.accounting`
+- Uses `intuit-oauth` SDK (already installed)
+- Token storage: AES-256-GCM encrypted in PostgreSQL `practices.qbo_tokens` column
+- Proactive token refresh at 50-minute mark (tokens expire at 60 min)
+- Rolling refresh token rotation (100-day lifetime)
+- Initial connect: full sync of last 12 months from Purchase, Deposit, Transfer, Account, Vendor endpoints
+- Ongoing: webhook-based incremental sync + daily batch reconciliation
+- Phase 1–2: READ-ONLY from QBO. Write-back deferred to Phase 3+
+- Deduplicate by `qbo_txn_id` per practice
 
-### Transaction Categorization — Three-Tier Engine
+### Transaction Categorization — Layered Engine
 
-**Tier 1: Deterministic Rules (target: 55–65% of transactions)**
-- Hard-coded vendor matching against a curated dental industry list
-- Known business vendors (100% confidence): Henry Schein, Patterson Dental, Benco Dental, Darby Dental, Net32, Glidewell, Burbank Dental Lab, plus any vendor with "dental lab" in name
-- Known software (100%): Dentrix, Eaglesoft, Open Dental, Pearl, Weave, Curve Dental
-- Known payroll (100%): ADP, Gusto, Paychex, QuickBooks Payroll
-- Known personal (95%): Netflix, Spotify, gym memberships, meal kits
-- Ambiguous/flagged: Amazon, Walmart, Target (always require review)
-- Address-based: rent/mortgage classified by matching to known practice vs home address
+The categorization engine evaluates transactions in strict priority order. First match wins.
 
-**Tier 2: ML Classification (Python FastAPI microservice)**
+**Layer 0: User Rules (highest priority, 100% confidence)**
+- User-created rules from manual corrections or the rule builder
+- Match on vendor name, description, or amount range
+- Scoped to practice_id — each practice has its own rules
+- ALREADY IMPLEMENTED in `lib/categorization/rules.ts`
+
+**Layer 1: QBO Account Mapping (90–95% confidence) — NEEDS PHASE 2 WORK**
+- If the dentist or bookkeeper already assigned a QBO chart-of-accounts category, respect that decision
+- The `accountRef` field is already captured and stored but NOT currently used by the rule engine
+- Business accounts (95% confidence): "Lab Fees", "Dental Supplies", "Payroll", "Rent", "Utilities", "Insurance", "Professional", "Education", "Marketing", "Equipment", "Instruments", "Services"
+- Personal accounts (90% confidence): "Entertainment", "Fitness", "Personal", "Owner's Draw"
+- Ambiguous accounts (flag for review): "Supplies" (could be business or personal), "Food" (team lunch vs personal), "Subscriptions" (practice software vs Netflix), "Office" (practice vs home office)
+- The account mapping should be configurable per practice — during onboarding, the doctor maps their QBO chart of accounts to business/personal/ambiguous
+- This is a CRITICAL gap: QBO already has categorization data we're ignoring
+
+**Layer 2: Vendor Matching (85–100% confidence) — COMPLETE**
+- Hard-coded vendor lists for dental industry
+- Known business vendors (100%): Henry Schein, Patterson, Benco, Glidewell, labs, software, payroll
+- Known personal (95%): Netflix, Spotify, gyms, meal kits
+- Ambiguous retail (40%): Amazon, Walmart, Target — always flagged
+- Vendor lists in `lib/categorization/vendors.ts`
+
+**Layer 3: ML Classification (Phase 3 — Python FastAPI microservice)**
 - Fine-tuned DistilBERT on labeled dental practice transaction data
 - Input features: merchant name, memo/description, QBO account category, amount, day/time
 - Temporal pattern detection for recurring charges
-- Dental-specific amount heuristics (e.g., $3,500 to dental vendor = business; $35 restaurant at lunch = likely personal)
-- Cross-account correlation (transfers to personal accounts flag downstream spending)
+- Dental-specific amount heuristics
+- Cross-account correlation for transfers
 
-**Tier 3: User Feedback Loop**
-- Every user correction creates a user-specific rule (highest priority)
-- Corrections are logged with original prediction, correction, and context
-- Aggregated anonymized corrections retrain the ML model quarterly
+**Layer 4: User Feedback Loop (Phase 2)**
+- Every user correction creates a user-specific rule (becomes Layer 0)
+- After 2 identical vendor corrections, auto-prompt to create a persistent rule
+- Corrections logged with original prediction + context for ML retraining
 
-**Confidence Scoring:**
-- 90–100%: Auto-categorized (green in UI), no action needed
-- 70–89%: Suggested category (yellow), soft prompt to confirm
-- Below 70%: Flagged ambiguous (orange/red), must review before included in reports
+**Confidence Scoring & Review Flow:**
+- 90–100%: Auto-categorized (green) — QBO account was clear, or known vendor match, or user rule. Shown as "accepted" but user can override.
+- 70–89%: AI suggestion (yellow) — educated guess from ML or weaker signal. "We think this is Business because [reasoning]." One click to accept or change.
+- Below 70%: Needs review (orange/red) — ambiguous vendor, no QBO account signal, low ML confidence. Must categorize manually before included in reports.
+
+**Key principle:** If the categorization comes from QBO (the dentist's own bookkeeper already made the call), that's a 90%+ confidence signal. We're leveraging work that's already been done — not ignoring it.
 
 ### Database Schema (PostgreSQL 16)
 
 Core tables — do not rename or restructure without discussion:
 - `practices` — id, name, qbo_realm_id, qbo_tokens (encrypted), fiscal_year_start, practice_addresses[]
 - `transactions` — id, practice_id, qbo_txn_id, date, amount, vendor_name, description, account_ref, raw_json
-- `categorizations` — id, transaction_id, category (business|personal|ambiguous), confidence, source (rule|ml|user), rule_id, created_at
+- `categorizations` — id, transaction_id, category (business|personal|ambiguous), confidence, source (rule|ml|user), rule_id, reasoning, created_at
 - `user_rules` — id, practice_id, match_type (vendor|description|amount_range), match_value, category, priority
 - `review_sessions` — id, practice_id, user_id, period_start, period_end, status (in_progress|completed), completed_at
 - `forecasts` — id, practice_id, forecast_date, period_months, method, parameters_json, results_json
 
-Row-level security scoped to `practice_id`. Full audit logging on all mutations.
+**Tables to add in Phase 2:** `users` (id, practice_id, email, name, role, created_at), `audit_log` (id, practice_id, user_id, action, entity_type, entity_id, old_value, new_value, created_at)
+
+### What Doctors Actually Want (Product Vision)
+
+Transaction categorization is the data ingestion layer — NOT the product. The product is a personal CFO. Key features by priority:
+
+1. **True Profitability** — Separate business vs personal to show real practice P&L and overhead ratio
+2. **Free Cash Flow** — Business free cash, personal free cash, combined — updated monthly automatically
+3. **Debt Capacity Model** — "Can I afford to buy that building?" with DSCR calculations and stress testing
+4. **Combined Net Worth** — Practice value + real estate + investments + retirement - all liabilities (requires Plaid integration in Phase 4+)
+5. **Cost of Capital Review** — All loans dashboard, refinance opportunity detection, payoff acceleration modeling
+6. **Tax Strategies** — Year-end planning alerts, cost segregation on real estate, bonus depreciation tracking (advisory only — always disclaim "consult your CPA")
+7. **Business Valuation** — Collections multiple estimate, EBITDA method, trend tracking, vendor cost benchmarking
+8. **Retirement Planning** — Passive income gap analysis, asset acquisition roadmap
+9. **Investment ROI** — Deal analyzer for rental properties, compare ROI across investment types
+10. **Referral Marketplace** — Detect refinance/insurance review opportunities → partner referrals (revenue model)
 
 ### Cash Flow Forecasting
 
 - Operates ONLY on confirmed business-classified transactions
 - Primary model: Holt-Winters triple exponential smoothing
-- Dental seasonality adjustments: summer dip (Jun–Aug), year-end insurance rush (Nov–Dec), January benefit reset
-- Key output metrics: Net Operating Cash Flow, Cash Runway, Overhead Ratio (benchmark: 55–65%), Confidence Intervals (80% and 95%)
-- Scenario modeling via adjustable sliders ("What if I hire an associate?")
-
-### Target Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | Next.js 14+ (App Router), TanStack Query, Zustand, Tailwind CSS, shadcn/ui, TanStack Table, Recharts |
-| API | Node.js / Express or Next.js API Routes |
-| Classification | Python FastAPI microservice |
-| Database | PostgreSQL 16 + Redis (BullMQ for job queue) |
-| Auth | NextAuth.js or Clerk (handles both app login and QBO OAuth) |
-
-**Note:** The current repo is plain Vite + React. Migration to Next.js is expected. When that happens, preserve the architecture visualization component.
+- Dental seasonality: summer dip (Jun–Aug), year-end insurance rush (Nov–Dec), January benefit reset
+- Key metrics: Net Operating Cash Flow, Cash Runway, Overhead Ratio (benchmark 55–65%), DSCR, Confidence Intervals (80% + 95%)
+- Scenario modeling: "What if I hire an associate?" / "What if production drops 15%?"
 
 ### Review Interface — UX Requirements
 
-This is the most critical screen. Design for speed and keyboard navigation:
-- Split-panel layout: filterable transaction list (left) + transaction detail (right)
+This is the most critical screen. Design for speed:
+- Split-panel: transaction list (left) + detail (right)
 - Default sort: lowest confidence first
-- Keyboard shortcuts: B = Business, P = Personal, S = Split, R = Create Rule, Arrow Down = Next
-- Batch mode: select multiple same-vendor transactions, apply single categorization
-- Split transaction modal: allocate percentages (e.g., 60% business / 40% personal)
-- Monthly review workflow with progress indicator and completion state
-- Target: user should clear 30–50 flagged transactions in under 10 minutes
+- Keyboard shortcuts (Phase 2): B = Business, P = Personal, S = Split, R = Create Rule, Arrow Down = Next
+- Batch mode (Phase 2): select multiple same-vendor transactions, apply single categorization
+- Split transaction modal (Phase 2): allocate percentages (60/40 business/personal)
+- Monthly review workflow with progress bar and completion state
+- Target: 30–50 flagged transactions in under 10 minutes
 
 ## Implementation Phases
 
-When building, follow this phase order. Do not jump ahead.
-
-- **Phase 1 (Weeks 1–4):** QBO OAuth + token management, transaction sync pipeline, PostgreSQL schema + migrations, Tier 1 deterministic rule engine, minimal review UI (transaction list with Business/Personal toggle)
-- **Phase 2 (Weeks 5–8):** ML classification service (Tier 2), full review interface with keyboard nav + batch ops, user feedback loop (Tier 3), split transaction support, monthly review workflow
-- **Phase 3 (Weeks 9–12):** Forecasting engine, budget builder, dashboard with charts, scenario modeling, export (PDF, CSV, QBO journal entry write-back with preview + confirm)
-- **Phase 4 (Weeks 13–16):** Multi-practice support, accountant portal, mobile-responsive review, peer benchmarks
+- **Phase 1 (COMPLETE):** Next.js migration, Drizzle schema, QBO OAuth + sync, Tier 1 rule engine, basic review UI, seed data
+- **Phase 2 (CURRENT):** Auth + user management, live dashboard, keyboard shortcuts + batch mode, user feedback loop (auto-create rules from corrections), audit logging, fix categorization history bug, category/confidence SQL-level filtering
+- **Phase 3:** Cash flow forecasting engine, budget builder, scenario modeling, true profitability reports, free cash flow calculations, export (PDF/CSV)
+- **Phase 4:** Multi-practice management, accountant portal, Plaid integration for bank/investment accounts, net worth tracking, cost of capital dashboard
+- **Phase 5:** Debt capacity model, business valuation, tax strategy alerts, ROI calculator
+- **Phase 6:** Retirement planning, referral marketplace, partner integrations
 
 ## Security Requirements
 
-- All QBO tokens encrypted at rest (AES-256-GCM)
-- All data in transit over TLS 1.3
-- JWT auth with short-lived access tokens (15 min) + HTTP-only refresh cookies
-- Row-level security in PostgreSQL scoped to practice_id
-- Delete customer data within 30 days of QBO disconnection (Intuit compliance)
-- Audit log every categorization change, data export, and admin action
+- QBO tokens: AES-256-GCM encrypted at rest (IMPLEMENTED)
+- All data in transit: TLS 1.3
+- Auth: JWT with short-lived access tokens (15 min) + HTTP-only refresh cookies
+- Database: Row-level security scoped to practice_id
+- Intuit compliance: delete customer data within 30 days of QBO disconnection
+- Audit log: every categorization change, data export, and admin action
 
-## Code Style Preferences
+## Code Style
 
-- Use JSX (not TSX) unless migrating to TypeScript is explicitly agreed
-- Prefer functional components with hooks
-- Use named exports for utility modules, default exports for page/route components
-- Keep components under 200 lines — extract into subcomponents when exceeded
-- Co-locate tests with source files (e.g., `Component.test.jsx` next to `Component.jsx`)
+- TypeScript throughout (.ts/.tsx) — no .js/.jsx for new files
+- Functional components with hooks
+- Named exports for utility modules, default exports for page/route components
+- Components under 200 lines — extract subcomponents when exceeded
+- Co-locate tests: `Component.test.tsx` next to `Component.tsx`
+- Use `cn()` from `lib/utils` for conditional Tailwind classes
+- API routes return NextResponse.json() with consistent error shapes: `{ error: string }`
 
+## Known Issues (Fix in Phase 2)
+
+1. **QBO account data ignored:** The `accountRef` field is captured from QBO and stored in the database, but the rule engine in `lib/categorization/rules.ts` never reads it. If a bookkeeper already categorized a transaction as "Lab Fees" in QBO, we should treat that as 90–95% confidence business — not run it through vendor matching as if we know nothing. This is the highest-priority fix.
+2. **Categorization audit trail:** `app/api/categorize/[id]/route.ts` deletes old categorization before inserting new one. Should INSERT new row and keep history (latest row wins for display, full history preserved for audit).
+3. **Post-query filtering:** `app/api/transactions/route.ts` filters category/confidence in JavaScript after SQL query. Move to SQL WHERE clauses for performance.
+4. **No auth:** No user accounts, no login, no session management. All API routes are currently unauthenticated.
+5. **No .env.example:** Need template with all required env vars documented.
+6. **Dashboard is static:** Shows placeholder "--" values. Should query actual transaction/categorization counts.
+7. **Transactions page is a placeholder:** Just shows "connect to get started" message.

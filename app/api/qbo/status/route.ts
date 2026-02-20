@@ -2,21 +2,26 @@ import { NextResponse } from "next/server";
 import { isDemoMode, getDemoStatus } from "@/lib/qbo/demo-mode";
 import { db } from "@/lib/db";
 import { practices } from "@/lib/db/schema";
-import { isNotNull } from "drizzle-orm";
+import { eq } from "drizzle-orm";
+import { getSessionOrDemo } from "@/lib/auth/session";
 
 export async function GET() {
   if (isDemoMode()) {
     return NextResponse.json(getDemoStatus());
   }
 
-  // Check if any practice has tokens stored
+  const session = await getSessionOrDemo();
+  if (!session) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
   const [practice] = await db
-    .select({ id: practices.id, name: practices.name })
+    .select({ id: practices.id, name: practices.name, qboTokens: practices.qboTokens })
     .from(practices)
-    .where(isNotNull(practices.qboTokens))
+    .where(eq(practices.id, session.practiceId))
     .limit(1);
 
-  if (practice) {
+  if (practice?.qboTokens) {
     return NextResponse.json({
       connected: true,
       mode: "live",

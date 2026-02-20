@@ -12,6 +12,7 @@ import { useState } from "react";
 import { CategoryBadge } from "./category-badge";
 import { cn } from "@/lib/utils";
 import { ArrowUpDown } from "lucide-react";
+import { useReviewStore } from "@/lib/store/review-store";
 
 export interface TransactionRow {
   id: string;
@@ -32,82 +33,118 @@ interface TransactionTableProps {
   onSelect: (id: string) => void;
 }
 
-const columns: ColumnDef<TransactionRow>[] = [
-  {
-    accessorKey: "date",
-    header: ({ column }) => (
-      <button
-        className="flex items-center gap-1"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-      >
-        Date <ArrowUpDown size={12} />
-      </button>
-    ),
-    cell: ({ row }) => (
-      <span className="text-xs">
-        {new Date(row.getValue("date")).toLocaleDateString()}
-      </span>
-    ),
-  },
-  {
-    accessorKey: "vendorName",
-    header: "Vendor",
-    cell: ({ row }) => (
-      <span className="font-medium text-sm truncate max-w-[180px] block">
-        {row.getValue("vendorName") || "Unknown"}
-      </span>
-    ),
-  },
-  {
-    accessorKey: "amount",
-    header: ({ column }) => (
-      <button
-        className="flex items-center gap-1"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-      >
-        Amount <ArrowUpDown size={12} />
-      </button>
-    ),
-    cell: ({ row }) => {
-      const amount = parseFloat(row.getValue("amount"));
-      return (
-        <span
-          className={cn(
-            "text-sm font-mono",
-            amount < 0 ? "text-red-400" : "text-green-400"
-          )}
-        >
-          ${Math.abs(amount).toLocaleString("en-US", {
-            minimumFractionDigits: 2,
-          })}
-        </span>
-      );
-    },
-  },
-  {
-    accessorKey: "confidence",
-    header: ({ column }) => (
-      <button
-        className="flex items-center gap-1"
-        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-      >
-        Category <ArrowUpDown size={12} />
-      </button>
-    ),
-    cell: ({ row }) => (
-      <CategoryBadge
-        category={row.original.category}
-        confidence={row.original.confidence}
-      />
-    ),
-  },
-];
-
 export function TransactionTable({
   data,
   selectedId,
   onSelect,
 }: TransactionTableProps) {
+  const { selectedTransactionIds, toggleBatchSelect, selectAllVisible } =
+    useReviewStore();
+
+  const allSelected =
+    data.length > 0 && data.every((d) => selectedTransactionIds.includes(d.id));
+
+  const columns: ColumnDef<TransactionRow>[] = [
+    {
+      id: "select",
+      header: () => (
+        <input
+          type="checkbox"
+          checked={allSelected}
+          onChange={() => {
+            if (allSelected) {
+              useReviewStore.getState().clearBatchSelection();
+            } else {
+              selectAllVisible(data.map((d) => d.id));
+            }
+          }}
+          className="rounded"
+        />
+      ),
+      cell: ({ row }) => (
+        <input
+          type="checkbox"
+          checked={selectedTransactionIds.includes(row.original.id)}
+          onChange={(e) => {
+            e.stopPropagation();
+            toggleBatchSelect(row.original.id);
+          }}
+          onClick={(e) => e.stopPropagation()}
+          className="rounded"
+        />
+      ),
+      size: 40,
+    },
+    {
+      accessorKey: "date",
+      header: ({ column }) => (
+        <button
+          className="flex items-center gap-1"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Date <ArrowUpDown size={12} />
+        </button>
+      ),
+      cell: ({ row }) => (
+        <span className="text-xs">
+          {new Date(row.getValue("date")).toLocaleDateString()}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "vendorName",
+      header: "Vendor",
+      cell: ({ row }) => (
+        <span className="font-medium text-sm truncate max-w-[180px] block">
+          {row.getValue("vendorName") || "Unknown"}
+        </span>
+      ),
+    },
+    {
+      accessorKey: "amount",
+      header: ({ column }) => (
+        <button
+          className="flex items-center gap-1"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Amount <ArrowUpDown size={12} />
+        </button>
+      ),
+      cell: ({ row }) => {
+        const amount = parseFloat(row.getValue("amount"));
+        return (
+          <span
+            className={cn(
+              "text-sm font-mono",
+              amount < 0 ? "text-red-400" : "text-green-400"
+            )}
+          >
+            ${Math.abs(amount).toLocaleString("en-US", {
+              minimumFractionDigits: 2,
+            })}
+          </span>
+        );
+      },
+    },
+    {
+      accessorKey: "confidence",
+      header: ({ column }) => (
+        <button
+          className="flex items-center gap-1"
+          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+        >
+          Category <ArrowUpDown size={12} />
+        </button>
+      ),
+      cell: ({ row }) => (
+        <CategoryBadge
+          category={row.original.category}
+          confidence={row.original.confidence}
+        />
+      ),
+    },
+  ];
+
   const [sorting, setSorting] = useState<SortingState>([
     { id: "confidence", desc: false },
   ]);

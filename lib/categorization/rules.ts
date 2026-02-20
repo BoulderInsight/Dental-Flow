@@ -9,6 +9,7 @@ import {
   PERSONAL_PATTERNS,
   AMBIGUOUS_RETAIL,
 } from "./vendors";
+import { categorizeByAccount } from "./account-mapping";
 
 export interface RuleResult {
   category: "business" | "personal" | "ambiguous";
@@ -78,7 +79,18 @@ export function categorizeTransaction(
     }
   }
 
-  // Priority 2: Ambiguous retail — always flag (check before other matches)
+  // Priority 2: QBO account mapping — business/personal (bookkeeper's intent)
+  const accountResult = categorizeByAccount(txn.accountRef);
+  if (accountResult && accountResult.category !== "ambiguous") {
+    return {
+      category: accountResult.category,
+      confidence: accountResult.confidence,
+      ruleId: null,
+      reasoning: accountResult.reasoning,
+    };
+  }
+
+  // Priority 3: Ambiguous retail — always flag (check before other matches)
   if (matchesVendor(vendor, AMBIGUOUS_RETAIL)) {
     return {
       category: "ambiguous",
@@ -162,6 +174,16 @@ export function categorizeTransaction(
       confidence: 85,
       ruleId: null,
       reasoning: `Matches personal pattern: "${personalPattern}"`,
+    };
+  }
+
+  // Priority 11: QBO ambiguous account mapping — catch-all before giving up
+  if (accountResult && accountResult.category === "ambiguous") {
+    return {
+      category: accountResult.category,
+      confidence: accountResult.confidence,
+      ruleId: null,
+      reasoning: accountResult.reasoning,
     };
   }
 

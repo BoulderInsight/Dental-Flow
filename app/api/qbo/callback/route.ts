@@ -5,10 +5,16 @@ import { storeTokens } from "@/lib/qbo/token-manager";
 import { db } from "@/lib/db";
 import { practices } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { getSessionOrDemo } from "@/lib/auth/session";
 
 export async function GET(request: NextRequest) {
   if (isDemoMode()) {
     return NextResponse.redirect(new URL("/", request.url));
+  }
+
+  const session = await getSessionOrDemo();
+  if (!session) {
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   try {
@@ -16,23 +22,13 @@ export async function GET(request: NextRequest) {
       request.url
     );
 
-    // Find or create practice for this realm
-    let [practice] = await db
-      .select()
-      .from(practices)
-      .where(eq(practices.qboRealmId, realmId));
+    // Update the practice with QBO realm
+    await db
+      .update(practices)
+      .set({ qboRealmId: realmId })
+      .where(eq(practices.id, session.practiceId));
 
-    if (!practice) {
-      [practice] = await db
-        .insert(practices)
-        .values({
-          name: "My Practice",
-          qboRealmId: realmId,
-        })
-        .returning();
-    }
-
-    await storeTokens(practice.id, accessToken, refreshToken);
+    await storeTokens(session.practiceId, accessToken, refreshToken);
 
     return NextResponse.redirect(new URL("/?connected=true", request.url));
   } catch (error) {

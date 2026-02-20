@@ -9,6 +9,7 @@ import {
   ClipboardCheck,
   TrendingUp,
   Network,
+  Settings,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
@@ -19,6 +20,7 @@ const navItems = [
   { href: "/transactions", label: "Transactions", icon: Receipt },
   { href: "/review", label: "Review", icon: ClipboardCheck },
   { href: "/forecast", label: "Forecast", icon: TrendingUp },
+  { href: "/settings/rules", label: "Rules", icon: Settings },
   { href: "/architecture", label: "Architecture", icon: Network },
 ];
 

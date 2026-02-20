@@ -114,6 +114,11 @@ const seedTransactions: {
   { vendorName: "Best Buy", description: "Computer monitor", amount: "-549.99", accountRef: "Equipment", category: "ambiguous" },
   { vendorName: "Apple Store", description: "iPad purchase", amount: "-999.00", accountRef: "Equipment", category: "ambiguous" },
 
+  // Account mapping test: unknown vendors with clear QBO account refs
+  { vendorName: "Acme Lab Services", description: "Lab work for patient cases", amount: "-850.00", accountRef: "Lab Fees", category: "misc" },
+  { vendorName: "LA Fitness", description: "Monthly membership", amount: "-49.99", accountRef: "Fitness", category: "personal" },
+  { vendorName: "Smith & Associates", description: "Consulting services", amount: "-1500.00", accountRef: "Professional Fees", category: "misc" },
+
   // ~15 Misc (utilities, rent, insurance, CE courses)
   { vendorName: "Pacific Gas & Electric", description: "Monthly electric bill", amount: "-456.78", accountRef: "Utilities", category: "misc" },
   { vendorName: "City Water District", description: "Water and sewer", amount: "-123.45", accountRef: "Utilities", category: "misc" },

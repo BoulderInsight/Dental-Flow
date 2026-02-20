@@ -15,6 +15,13 @@ interface ReviewState {
   sortBy: string;
   sortDir: "asc" | "desc";
   page: number;
+  showHelp: boolean;
+
+  // Batch mode
+  selectedTransactionIds: string[];
+  toggleBatchSelect: (id: string) => void;
+  selectAllVisible: (ids: string[]) => void;
+  clearBatchSelection: () => void;
 
   selectTransaction: (id: string | null) => void;
   setFilter: <K extends keyof ReviewFilters>(
@@ -24,6 +31,7 @@ interface ReviewState {
   resetFilters: () => void;
   setSort: (sortBy: string, sortDir: "asc" | "desc") => void;
   setPage: (page: number) => void;
+  toggleHelp: () => void;
 }
 
 const defaultFilters: ReviewFilters = {
@@ -41,6 +49,18 @@ export const useReviewStore = create<ReviewState>((set) => ({
   sortBy: "confidence",
   sortDir: "asc",
   page: 1,
+  showHelp: false,
+
+  // Batch mode
+  selectedTransactionIds: [],
+  toggleBatchSelect: (id) =>
+    set((state) => ({
+      selectedTransactionIds: state.selectedTransactionIds.includes(id)
+        ? state.selectedTransactionIds.filter((i) => i !== id)
+        : [...state.selectedTransactionIds, id],
+    })),
+  selectAllVisible: (ids) => set({ selectedTransactionIds: ids }),
+  clearBatchSelection: () => set({ selectedTransactionIds: [] }),
 
   selectTransaction: (id) => set({ selectedTransactionId: id }),
   setFilter: (key, value) =>
@@ -51,4 +71,5 @@ export const useReviewStore = create<ReviewState>((set) => ({
   resetFilters: () => set({ filters: { ...defaultFilters }, page: 1 }),
   setSort: (sortBy, sortDir) => set({ sortBy, sortDir, page: 1 }),
   setPage: (page) => set({ page }),
+  toggleHelp: () => set((state) => ({ showHelp: !state.showHelp })),
 }));

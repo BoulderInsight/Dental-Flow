@@ -2,17 +2,22 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
+import { useFeedbackStore } from "@/lib/store/feedback-store";
+import { toast } from "sonner";
 
 interface CategoryActionsProps {
   transactionId: string;
   currentCategory: string | null;
+  vendorName?: string | null;
 }
 
 export function CategoryActions({
   transactionId,
   currentCategory,
+  vendorName,
 }: CategoryActionsProps) {
   const queryClient = useQueryClient();
+  const recordCorrection = useFeedbackStore((s) => s.recordCorrection);
 
   const mutation = useMutation({
     mutationFn: async (category: string) => {
@@ -22,12 +27,51 @@ export function CategoryActions({
         body: JSON.stringify({ category, confidence: 100 }),
       });
       if (!res.ok) throw new Error("Failed to categorize");
-      return res.json();
+      return { ...(await res.json()), category };
     },
-    onSuccess: () => {
+    onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["transactions"] });
+      queryClient.invalidateQueries({ queryKey: ["transaction-history"] });
+
+      // Track feedback for rule suggestion
+      if (vendorName) {
+        const count = recordCorrection(vendorName, data.category);
+        if (count >= 2) {
+          toast.info(
+            `You've categorized "${vendorName}" as ${data.category} ${count} times. Create a rule?`,
+            {
+              action: {
+                label: "Create Rule",
+                onClick: () => createRule(vendorName, data.category),
+              },
+              duration: 8000,
+            }
+          );
+        }
+      }
     },
   });
+
+  async function createRule(vendor: string, category: string) {
+    try {
+      const res = await fetch("/api/rules", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          matchType: "vendor",
+          matchValue: vendor,
+          category,
+        }),
+      });
+      if (res.ok) {
+        toast.success(`Rule created: "${vendor}" → ${category}`);
+      } else {
+        toast.error("Failed to create rule");
+      }
+    } catch {
+      toast.error("Failed to create rule");
+    }
+  }
 
   return (
     <div className="flex gap-2">
