@@ -9,6 +9,8 @@ import {
   pgEnum,
   uniqueIndex,
   index,
+  boolean,
+  date,
 } from "drizzle-orm/pg-core";
 
 // Enums
@@ -43,16 +45,27 @@ export const periodTypeEnum = pgEnum("period_type", [
   "annual",
 ]);
 
+export const plaidConnectionStatusEnum = pgEnum("plaid_connection_status", [
+  "active",
+  "error",
+  "pending_reauth",
+]);
+
 // Tables
 
 export const practices = pgTable("practices", {
   id: uuid("id").defaultRandom().primaryKey(),
   name: text("name").notNull(),
+  industry: text("industry").default("dental").notNull(),
   qboRealmId: text("qbo_realm_id"),
   qboTokens: text("qbo_tokens"), // AES-256-GCM encrypted JSON
   fiscalYearStart: integer("fiscal_year_start").default(1), // month 1-12
   practiceAddresses: jsonb("practice_addresses").$type<string[]>().default([]),
   reserveThreshold: numeric("reserve_threshold", { precision: 12, scale: 2 }).default("10000.00"),
+  estimatedValue: numeric("estimated_value", { precision: 14, scale: 2 }),
+  realEstateValue: numeric("real_estate_value", { precision: 14, scale: 2 }),
+  otherAssets: numeric("other_assets", { precision: 14, scale: 2 }),
+  otherLiabilities: numeric("other_liabilities", { precision: 14, scale: 2 }),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
@@ -75,6 +88,57 @@ export const users = pgTable(
   (table) => [
     uniqueIndex("users_email_idx").on(table.email),
     index("users_practice_idx").on(table.practiceId),
+  ]
+);
+
+// User-Practice join table (multi-practice support)
+export const userPractices = pgTable(
+  "user_practices",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    role: roleEnum("role").default("owner").notNull(),
+    isDefault: boolean("is_default").default(false).notNull(),
+    invitedBy: uuid("invited_by").references(() => users.id),
+    invitedAt: timestamp("invited_at"),
+    acceptedAt: timestamp("accepted_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("user_practices_user_practice_idx").on(
+      table.userId,
+      table.practiceId
+    ),
+    index("user_practices_user_idx").on(table.userId),
+    index("user_practices_practice_idx").on(table.practiceId),
+  ]
+);
+
+// Industry config table
+export const industryConfigs = pgTable(
+  "industry_configs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id").references(() => practices.id, {
+      onDelete: "cascade",
+    }),
+    industrySlug: text("industry_slug").notNull(),
+    configJson: jsonb("config_json").notNull(),
+    isCustom: boolean("is_custom").default(false).notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("industry_configs_practice_slug_idx").on(
+      table.practiceId,
+      table.industrySlug
+    ),
+    index("industry_configs_slug_idx").on(table.industrySlug),
   ]
 );
 
@@ -290,6 +354,81 @@ export const financialSnapshots = pgTable(
   ]
 );
 
+// Plaid tables
+export const plaidConnections = pgTable(
+  "plaid_connections",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    plaidItemId: text("plaid_item_id").notNull(),
+    accessToken: text("access_token").notNull(), // AES-256-GCM encrypted
+    institutionName: text("institution_name").notNull(),
+    institutionId: text("institution_id").notNull(),
+    status: plaidConnectionStatusEnum("status").default("active").notNull(),
+    lastSyncedAt: timestamp("last_synced_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("plaid_connections_item_idx").on(table.plaidItemId),
+    index("plaid_connections_practice_idx").on(table.practiceId),
+  ]
+);
+
+export const plaidAccounts = pgTable(
+  "plaid_accounts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    plaidConnectionId: uuid("plaid_connection_id")
+      .references(() => plaidConnections.id, { onDelete: "cascade" })
+      .notNull(),
+    plaidAccountId: text("plaid_account_id").notNull(),
+    name: text("name").notNull(),
+    officialName: text("official_name"),
+    type: text("type").notNull(), // depository, investment, loan, credit
+    subtype: text("subtype"), // checking, savings, 401k, mortgage
+    currentBalance: numeric("current_balance", { precision: 14, scale: 2 }).notNull(),
+    availableBalance: numeric("available_balance", { precision: 14, scale: 2 }),
+    currency: text("currency").default("USD").notNull(),
+    isIncludedInNetWorth: boolean("is_included_in_net_worth").default(true).notNull(),
+    lastBalanceUpdate: timestamp("last_balance_update"),
+  },
+  (table) => [
+    uniqueIndex("plaid_accounts_account_id_idx").on(
+      table.plaidConnectionId,
+      table.plaidAccountId
+    ),
+    index("plaid_accounts_practice_idx").on(table.practiceId),
+  ]
+);
+
+export const netWorthSnapshots = pgTable(
+  "net_worth_snapshots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    snapshotDate: date("snapshot_date").notNull(),
+    practiceValue: numeric("practice_value", { precision: 14, scale: 2 }),
+    realEstateValue: numeric("real_estate_value", { precision: 14, scale: 2 }),
+    investmentValue: numeric("investment_value", { precision: 14, scale: 2 }),
+    retirementValue: numeric("retirement_value", { precision: 14, scale: 2 }),
+    liquidAssets: numeric("liquid_assets", { precision: 14, scale: 2 }),
+    totalLiabilities: numeric("total_liabilities", { precision: 14, scale: 2 }),
+    netWorth: numeric("net_worth", { precision: 14, scale: 2 }),
+    computedAt: timestamp("computed_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("net_worth_snapshots_practice_idx").on(table.practiceId),
+    index("net_worth_snapshots_date_idx").on(table.practiceId, table.snapshotDate),
+  ]
+);
+
 // Type exports
 export type Practice = typeof practices.$inferSelect;
 export type NewPractice = typeof practices.$inferInsert;
@@ -309,3 +448,9 @@ export type Budget = typeof budgets.$inferSelect;
 export type NewBudget = typeof budgets.$inferInsert;
 export type FinancialSnapshot = typeof financialSnapshots.$inferSelect;
 export type NewFinancialSnapshot = typeof financialSnapshots.$inferInsert;
+export type UserPractice = typeof userPractices.$inferSelect;
+export type NewUserPractice = typeof userPractices.$inferInsert;
+export type IndustryConfigRow = typeof industryConfigs.$inferSelect;
+export type PlaidConnection = typeof plaidConnections.$inferSelect;
+export type PlaidAccount = typeof plaidAccounts.$inferSelect;
+export type NetWorthSnapshot = typeof netWorthSnapshots.$inferSelect;
