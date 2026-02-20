@@ -83,17 +83,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
           if (anyPractice) {
             token.practiceId = anyPractice.practiceId;
             token.role = anyPractice.role;
-          } else {
-            // Legacy fallback: read from users table
-            const [legacyUser] = await db
-              .select({ practiceId: users.practiceId, role: users.role })
-              .from(users)
-              .where(eq(users.id, user.id as string))
-              .limit(1);
-            if (legacyUser) {
-              token.practiceId = legacyUser.practiceId;
-              token.role = legacyUser.role;
-            }
           }
         }
       }

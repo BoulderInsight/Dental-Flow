@@ -165,4 +165,14 @@ export const veterinaryConfig: IndustryConfig = {
     "owner salary",
     "owner draw",
   ],
+  valuationMultipliers: {
+    revenueMultiple: { low: 0.70, mid: 0.85, high: 1.0 },
+    ebitdaMultiple: { low: 5.0, mid: 6.5, high: 8.0 },
+    sdeMultiple: { low: 2.5, mid: 3.25, high: 4.0 },
+  },
+  taxDefaults: {
+    section179Limit: 1220000,
+    bonusDepreciationRate: 0.4,
+    estimatedTaxQuarters: ["04-15", "06-15", "09-15", "01-15"],
+  },
 };

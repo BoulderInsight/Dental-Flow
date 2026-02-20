@@ -4,9 +4,9 @@ This file provides guidance to Claude Code when working with this repository. Re
 
 ## Project Overview
 
-DentalFlow Pro is a **multi-tenant personal CFO platform** initially built for dental practices but expanding to serve any small business that runs on QuickBooks Online. It automatically categorizes mixed business/personal transactions, provides true profitability reports, free cash flow tracking, budget management, cash flow forecasting with Holt-Winters, and scenario modeling.
+DentalFlow Pro is a **multi-tenant personal CFO platform** that started for dental practices and now supports any small business running on QuickBooks Online. It automatically categorizes mixed business/personal transactions using an industry-aware rule engine, provides true profitability reports, free cash flow tracking, budget management, Holt-Winters cash flow forecasting, scenario modeling, net worth tracking via Plaid, and multi-practice management with role-based access.
 
-Phases 1–3 are complete. The application has QBO integration, a layered categorization engine, authentication, a live dashboard, keyboard-driven transaction review with batch mode, audit logging, full financial intelligence (P&L, free cash flow, forecasting, budget builder, scenario modeling), and CSV export.
+Phases 1–4 are complete. Phase 5 adds advanced financial advisory features: debt capacity modeling, business valuation, tax strategy alerts, ROI calculator, and QBO write-back.
 
 ## Commands
 
@@ -17,7 +17,7 @@ Phases 1–3 are complete. The application has QBO integration, a layered catego
 - `npm run db:generate` — Generate Drizzle migrations
 - `npm run db:migrate` — Run Drizzle migrations
 - `npm run db:push` — Push schema to database (dev convenience)
-- `npm run db:seed` — Seed database with test data (18 months, dental seasonality)
+- `npm run db:seed` — Seed database with test data (18 months, industry-aware seasonality)
 - `npm run db:studio` — Open Drizzle Studio
 
 ## Tech Stack
@@ -25,11 +25,14 @@ Phases 1–3 are complete. The application has QBO integration, a layered catego
 - **Frontend:** React 19, TypeScript, Next.js 15 (App Router, Turbopack)
 - **Styling:** Tailwind CSS + shadcn/ui + Lucide icons
 - **Data fetching:** TanStack Query v5 + TanStack Table v8
-- **State:** Zustand v5 (with persist middleware for feedback tracking)
+- **State:** Zustand v5 (with persist middleware)
 - **Charts:** Recharts
 - **ORM:** Drizzle ORM + PostgreSQL 16
 - **Auth:** NextAuth v5 (Auth.js) with credentials provider, JWT sessions
 - **QBO SDK:** intuit-oauth v4
+- **Plaid SDK:** plaid + react-plaid-link
+- **AI:** @anthropic-ai/sdk (industry config generation)
+- **PDF:** jspdf + jspdf-autotable
 - **Validation:** Zod v4
 - **Toasts:** Sonner
 - **Cache/Queue:** Redis (ioredis)
@@ -44,78 +47,85 @@ app/
   globals.css                         # Tailwind globals
   (app)/                              # Authenticated route group (sidebar layout)
     layout.tsx                        # Sidebar wrapper
-    page.tsx                          # Live dashboard: stats, cash flow chart, top categories, financial health
+    page.tsx                          # Live dashboard: stats, cash flow, financial health, accountant banner
     review/page.tsx                   # Transaction review: keyboard shortcuts, batch mode, detail panel
     transactions/page.tsx             # Full transaction list: filters, sort, CSV export
-    finance/page.tsx                  # Financial intelligence: P&L, cash flow, forecast charts, insights
+    finance/page.tsx                  # Financial intelligence: P&L, cash flow, forecast, insights
     finance/budget/page.tsx           # Budget builder: auto-populate, targets, budget vs actual
-    finance/scenarios/page.tsx        # Scenario modeling: revenue slider, add/remove expenses, comparison
-    forecast/page.tsx                 # Forecast: Holt-Winters chart with confidence bands, seasonality
+    finance/scenarios/page.tsx        # Scenario modeling: revenue/expense/debt adjustments
+    finance/net-worth/page.tsx        # Net worth: Plaid accounts, manual entries, asset/liability breakdown
+    forecast/page.tsx                 # Forecast: Holt-Winters with confidence bands
     settings/rules/page.tsx           # User rule management (CRUD)
+    settings/industry/page.tsx        # Industry config: vendors, seasonality, benchmarks
+    settings/accounts/page.tsx        # Connected accounts: QBO + Plaid institutions
+    settings/practices/new/page.tsx   # Create new practice
+    settings/practices/members/page.tsx # Practice members + invite
     architecture/page.tsx             # Architecture visualization
-  (auth)/                             # Unauthenticated route group (minimal layout)
+  (auth)/                             # Unauthenticated route group
     layout.tsx                        # Centered layout
     login/page.tsx                    # Email/password login
-    signup/page.tsx                   # Signup + practice creation
+    signup/page.tsx                   # Signup + practice creation + industry selection
   api/
     auth/[...nextauth]/               # NextAuth route handler
-    auth/signup/                      # POST: create user + practice
+    auth/signup/                      # POST: create user + practice + user_practices
+    auth/switch-practice/             # POST: switch active practice in JWT
     dashboard/                        # GET: transaction stats, monthly cash flow, top categories
-    qbo/connect/                      # GET: initiate QBO OAuth
-    qbo/callback/                     # GET: OAuth callback, store encrypted tokens
-    qbo/status/                       # GET: connection status
-    qbo/sync/                         # POST: trigger full transaction sync
-    qbo/webhook/                      # POST: QBO webhook receiver
-    transactions/                     # GET: paginated, filtered (SQL-level), sorted
+    qbo/connect|callback|status|sync|webhook/  # QBO OAuth + sync
+    transactions/                     # GET: paginated, SQL-level filtered
     transactions/[id]/history/        # GET: categorization history
-    categorize/                       # POST: run rule engine on uncategorized
+    categorize/                       # POST: run rule engine
     categorize/[id]/                  # PUT: manual categorize (append-only)
     categorize/batch/                 # POST: batch categorize
-    rules/                            # GET/POST: user rules
-    rules/[id]/                       # PUT/DELETE: individual rule
-    finance/profitability/            # GET: P&L report with monthly breakdown
-    finance/cash-flow/                # GET: business/personal/combined free cash
-    finance/forecast/                 # GET: Holt-Winters 6-month projection
-    finance/budget/                   # GET/PUT: budget targets and vs actual
+    rules/ + rules/[id]/              # CRUD: user rules
+    finance/profitability/            # GET: P&L report
+    finance/cash-flow/                # GET: free cash flow
+    finance/forecast/                 # GET: Holt-Winters projection
+    finance/budget/                   # GET/PUT: budget targets + vs actual
     finance/scenario/                 # POST: scenario comparison
-    finance/snapshot/                 # GET: cached financial metrics
-    finance/snapshot/refresh/         # POST: force recompute
-    export/report/                    # GET: CSV export (profitability, cashflow, budget)
+    finance/snapshot/ + refresh/      # GET/POST: cached financial metrics
+    finance/net-worth/ + manual/ + snapshot/  # GET/PUT: net worth
+    export/report/                    # GET: CSV + PDF export
+    industry/generate/                # POST: AI-generate IndustryConfig
+    industry/config/                  # GET/PUT: industry config for practice
+    plaid/link-token|exchange|sync|accounts|connections/  # Plaid OAuth + sync
+    practices/ + [id]/invite|members/ # Multi-practice management
 components/
   ui/                                 # shadcn/ui primitives
-  layout/sidebar.tsx                  # Collapsible sidebar: Dashboard, Transactions, Review, Financials, Forecast, Rules
+  layout/sidebar.tsx                  # Collapsible sidebar: role-filtered nav items
+  layout/practice-switcher.tsx        # Multi-practice dropdown in sidebar header
   dashboard/                          # Cash flow chart, top categories, quick actions
-  finance/                            # Metric cards, profitability chart, cash flow area chart, forecast chart, insights panel
-  review/                             # Review panel, transaction table (checkboxes), detail (history), category actions
-                                      # (feedback tracking), filters, shortcut bar, batch action bar
-  transactions/                       # Transaction list table, filters, CSV export button
+  finance/                            # Metric cards, profitability chart, cash flow area chart, forecast chart, insights
+  review/                             # Review panel, table, detail, category actions (permission-aware), shortcuts, batch bar
+  transactions/                       # Transaction list table, filters, export button
+  plaid/                              # Plaid Link button
   qbo/                                # Connect button, sync status
 lib/
-  auth/config.ts                      # NextAuth: credentials provider, JWT callbacks (practiceId, role in token)
-  auth/session.ts                     # getSessionOrDemo() — real or demo session
+  auth/config.ts                      # NextAuth: credentials, JWT callbacks (reads user_practices)
+  auth/session.ts                     # getSessionOrDemo() + verifyPracticeMembership()
+  auth/permissions.ts                 # canPerform(), requireRole() — owner/manager/accountant
   audit/logger.ts                     # logAuditEvent() — append-only, never fails main flow
-  finance/profitability.ts            # P&L: revenue/expense by accountRef, overhead ratio, monthly breakdown
-  finance/cash-flow.ts                # Free cash flow: business, personal, combined, debt service, rolling averages
-  finance/forecast.ts                 # Holt-Winters triple exponential smoothing, dental seasonality, confidence bands
-  finance/budget.ts                   # Budget targets, auto-suggest from trailing 3mo, budget vs actual
-  finance/scenario.ts                 # Scenario engine: revenue/expense/debt adjustments, base vs scenario comparison
-  finance/insights.ts                 # Programmatic insights from financial metrics (template-driven, no LLM)
-  finance/snapshot.ts                 # Financial snapshot cache (24hr staleness, refresh on demand)
+  encryption/index.ts                 # Shared AES-256-GCM (used by QBO + Plaid)
+  industries/                         # types.ts (IndustryConfig), index.ts (registry), dental/chiropractic/veterinary/general configs
+  finance/profitability.ts            # P&L engine
+  finance/cash-flow.ts                # Free cash flow engine (uses industry config for patterns)
+  finance/forecast.ts                 # Holt-Winters (uses industry config for seasonality)
+  finance/budget.ts                   # Budget targets + vs actual
+  finance/scenario.ts                 # Scenario comparison engine
+  finance/insights.ts                 # Template-driven insights (uses industry benchmarks)
+  finance/snapshot.ts                 # Financial snapshot cache (24hr staleness)
+  finance/net-worth.ts                # Net worth from Plaid + manual entries
+  export/pdf-report.ts               # Monthly PDF report generation (jspdf)
   db/schema.ts                        # Full Drizzle schema (see Database Schema section)
-  db/seed.ts                          # 18 months of realistic transactions: revenue ($45K–$52K/mo), expenses,
-                                      # owner's draws ($15K/mo), loan payments, dental seasonality baked in
+  db/seed.ts                          # 18 months seasonal transactions
   db/index.ts                         # DB connection
-  qbo/                                # client, encryption, token-manager, sync, demo-mode
-  categorization/account-mapping.ts   # QBO account → business/personal/ambiguous (21 business, 6 personal, 10 ambiguous)
-  categorization/vendors.ts           # Curated dental vendor lists
-  categorization/rules.ts             # Layered engine: user rules → QBO accounts → vendors → patterns → ambiguous
-  categorization/engine.ts            # Orchestrator: runs rules on uncategorized transactions
+  qbo/                                # client, encryption (re-exports shared), token-manager, sync, demo-mode
+  plaid/client.ts                     # Plaid client: link token, exchange, accounts
+  categorization/                     # account-mapping, vendors, rules (all IndustryConfig-aware), engine
   hooks/use-keyboard-shortcuts.ts     # B/P/A/J/K/R/? keyboard handler
+  hooks/use-permissions.ts            # usePermissions() — canWrite, canAdmin, role
   store/                              # review-store, feedback-store, transactions-store (Zustand)
   utils.ts                            # cn() for Tailwind class merging
-middleware.ts                         # Auth: redirect to /login, demo mode bypass, public paths
-types/next-auth.d.ts                  # Session extensions (practiceId, role)
-types/intuit-oauth.d.ts               # intuit-oauth type declarations
+middleware.ts                         # Auth redirect + demo bypass
 ```
 
 ## System Design Decisions (Authoritative)
@@ -126,121 +136,73 @@ Do not deviate without explicit approval.
 
 Multi-tenant SaaS. All data isolated by `practice_id`:
 - Every data table has `practice_id` FK
-- QBO connections per-practice
-- User rules per-practice
-- Budgets per-practice per-year
-- Auth roles: owner, manager, accountant (read-only)
-- `getSessionOrDemo()` resolves practice context for all API routes
+- `user_practices` join table: users can belong to multiple practices with different roles
+- QBO and Plaid connections per-practice
+- Industry configs per-practice (with system-level defaults)
+- Auth roles: owner (full access), manager (read+write), accountant (read-only)
+- `getSessionOrDemo()` resolves practice context from JWT for all API routes
 
 ### QuickBooks Online Integration
 
-- Intuit OAuth 2.0, scope: `com.intuit.quickbooks.accounting` ✓
-- AES-256-GCM encrypted token storage ✓
+- Intuit OAuth 2.0 with AES-256-GCM token encryption ✓
 - Proactive refresh at 50-min mark ✓
-- Full sync: 12 months from Purchase, Deposit, Transfer ✓
-- Webhook incremental sync ✓
-- Deduplication by `qbo_txn_id` per practice ✓
-- **READ-ONLY through Phase 4. Write-back deferred to Phase 5+**
+- Full sync + webhook incremental + deduplication ✓
+- **READ-ONLY through Phase 4. Phase 5 adds write-back.**
 
-### Transaction Categorization — Layered Engine (COMPLETE)
+### Multi-Industry Support (Phase 4)
 
-Priority order, first match wins:
-1. **User Rules** (100%) — manual corrections or rule builder
-2. **QBO Account Mapping** (90–95%) — bookkeeper's existing QBO categorization
-3. **Vendor Matching** (85–100%) — curated industry vendor lists (currently dental-specific)
-4. **Pattern Matching** (85–95%) — keyword patterns in vendor/description
-5. **Ambiguous QBO fallback** (50%) — "Supplies", "Food", "Subscriptions"
+- `IndustryConfig` interface: vendors, seasonality, benchmarks, account mappings, debt/draw patterns
+- Curated configs: dental, chiropractic, veterinary, general
+- AI generation for unknown industries via Anthropic Claude API
+- Stored in `industry_configs` table, loaded by `getConfigForPractice()`
+- All financial engines load config dynamically
 
-User feedback loop: after 2 identical vendor corrections, prompts to create persistent rule.
+### Role-Based Access (Phase 4)
 
-**Phase 4 change:** Vendor lists and account mappings will be extracted into industry-specific configs (`lib/industries/`). The categorization engine will load the appropriate config based on `practices.industry`.
+- `lib/auth/permissions.ts`: owner (read+write+admin), manager (read+write), accountant (read)
+- All write API endpoints call `requireRole(session, 'write')`
+- UI: `usePermissions()` hook hides/disables write actions for accountants
+- Sidebar: `requireWrite` flag per nav item, filtered client-side
 
 ### Database Schema (PostgreSQL 16)
 
-Current tables:
-- `practices` — id, name, qbo_realm_id, qbo_tokens (encrypted), fiscal_year_start, practice_addresses[], reserve_threshold
-- `users` — id, practice_id, email, name, password_hash, role (owner|manager|accountant), timestamps
-- `accounts`, `sessions`, `verification_tokens` — NextAuth adapter tables
-- `transactions` — id, practice_id, qbo_txn_id, date, amount, vendor_name, description, account_ref, raw_json, synced_at
-- `categorizations` — id, transaction_id, category, confidence, source, rule_id, reasoning, created_at (APPEND-ONLY)
-- `user_rules` — id, practice_id, match_type, match_value, category, priority
-- `review_sessions` — id, practice_id, user_id, period_start, period_end, status, completed_at
-- `forecasts` — id, practice_id, forecast_date, period_months, method, parameters_json, results_json
-- `audit_log` — id, practice_id, user_id, action, entity_type, entity_id, old_value, new_value, created_at
-- `budgets` — id, practice_id, year, account_ref, monthly_target, timestamps (unique on practice+year+account)
-- `financial_snapshots` — id, practice_id, period_start, period_end, period_type, revenue, operating_expenses, overhead_ratio, net_operating_income, owner_compensation, true_net_profit, business_free_cash, personal_free_cash, combined_free_cash, excess_cash, computed_at
+Tables: practices, users, user_practices, accounts, sessions, verification_tokens, transactions, categorizations (append-only), user_rules, review_sessions, forecasts, audit_log, budgets, financial_snapshots, industry_configs, plaid_connections, plaid_accounts, net_worth_snapshots.
 
-### Financial Intelligence (COMPLETE)
+### Product Vision — Remaining Features
 
-**True Profitability (P&L):** Revenue by accountRef, operating expenses by category, overhead ratio (benchmark 55–65%), owner's compensation, true net profit. Monthly breakdown for 12-month trending.
-
-**Free Cash Flow:** Business (NOI - debt service), personal (draws - personal expenses), combined. Rolling 3mo and 12mo averages. Excess cash = combined - reserve threshold.
-
-**Forecast:** Holt-Winters triple exponential smoothing with dental seasonality indices. 6-month forward projection, 80% and 95% confidence bands. Cash runway and trend metrics. Stored in forecasts table.
-
-**Budget:** Auto-populate from trailing 3-month averages. Budget vs actual with under/on_track/over status. Monthly and YTD views.
-
-**Scenario Modeling:** Revenue %, new expenses, removed expenses, new debt service. Side-by-side base vs scenario with summary text.
-
-**Insights:** Template-driven (no LLM). Overhead status, excess cash / debt capacity hint, runway warning, top expense, trend direction, seasonal dip.
-
-### Product Vision
-
-Transaction categorization is the data ingestion layer. The product is a personal CFO:
-
-1. ~~True Profitability~~ ✓ (Phase 3)
-2. ~~Free Cash Flow~~ ✓ (Phase 3)
-3. ~~Cash Flow Forecasting~~ ✓ (Phase 3)
-4. ~~Budget Builder~~ ✓ (Phase 3)
-5. **Multi-Industry Support** (Phase 4 — expanding beyond dental)
-6. **Multi-Practice Management** (Phase 4)
-7. **Accountant Portal** (Phase 4 — read-only role)
-8. **Plaid Integration / Net Worth** (Phase 4)
-9. Debt Capacity Model (Phase 5)
-10. Business Valuation (Phase 5)
-11. Tax Strategies (Phase 5)
-12. Retirement Planning (Phase 6)
+Phase 5: Debt Capacity Model, Cost of Capital Review, Business Valuation, Tax Strategy Alerts, Investment ROI Calculator, QBO Write-back
+Phase 6: Retirement Planning, Referral Marketplace
 
 ## Implementation Phases
 
-- **Phase 1 (COMPLETE):** Next.js, Drizzle schema, QBO OAuth + sync, Tier 1 rule engine, review UI, seed data
-- **Phase 2 (COMPLETE):** Auth, live dashboard, keyboard shortcuts + batch mode, QBO account mapping, feedback loop, audit logging, SQL filtering, rules management
-- **Phase 3 (COMPLETE):** Profitability P&L, free cash flow, Holt-Winters forecast, budget builder, scenario modeling, financial snapshot caching, insights engine, CSV export, 18-month seasonal seed data
-- **Phase 4 (CURRENT):** Multi-industry config system (AI-generated for unknown industries), multi-practice management, accountant portal, Plaid integration, net worth tracking, PDF export
-- **Phase 5:** Debt capacity model, business valuation, tax strategy alerts, ROI calculator, QBO write-back
+- **Phase 1 (COMPLETE):** Next.js, Drizzle, QBO OAuth + sync, rule engine, review UI, seed data
+- **Phase 2 (COMPLETE):** Auth, dashboard, keyboard shortcuts, batch mode, QBO account mapping, feedback loop, audit logging
+- **Phase 3 (COMPLETE):** P&L, free cash flow, Holt-Winters forecast, budget builder, scenario modeling, snapshot caching, insights, CSV export
+- **Phase 4 (COMPLETE):** Multi-industry config (AI-generated), multi-practice management, accountant portal, Plaid integration, net worth tracking, PDF export
+- **Phase 5 (CURRENT):** Debt capacity model, cost of capital dashboard, business valuation, tax strategy alerts, ROI calculator, QBO write-back, tech debt fixes
 - **Phase 6:** Retirement planning, referral marketplace, partner integrations
 
-## Security Requirements
+## Known Technical Debt (see TECHNICAL_DEBT.md)
 
-- QBO tokens: AES-256-GCM encrypted at rest ✓
-- Auth: NextAuth v5 JWT sessions ✓
-- Middleware: auth redirect + demo bypass ✓
-- Audit logging: append-only, never fails main flow ✓
-- Row-level security scoped to practice_id
-- Intuit compliance: delete data within 30 days of disconnection
-- TLS 1.3 in production
+1. `profitability.ts` doesn't load industry config for overhead benchmarks
+2. `POST /api/finance/scenario` missing `requireRole()` check
+3. Legacy `users.practiceId` fallback in auth config
+4. Branding still says "DentalFlow" in sidebar, exports, PDF
+5. Email invites stored but not sent
+6. PDF export filename hardcoded
 
 ## Code Style & Patterns
 
 - TypeScript throughout — no .js/.jsx
-- Functional components with hooks, default exports for pages
-- Components under 200 lines — extract subcomponents
 - `getSessionOrDemo()` first in every API route, return 401 if null
-- `logAuditEvent()` for all state-changing operations
+- `requireRole(session, 'write')` on all write endpoints
+- `logAuditEvent()` for state-changing operations
 - Error shape: `{ error: string }` with HTTP status
 - New tables: always include `practice_id` FK + indexes
 - Latest categorization: correlated subquery `ORDER BY created_at DESC LIMIT 1`
-- Batch operations: Zod-validated, single audit log entry
-- Financial math: all in `lib/finance/` (server-side only), money as `numeric(12,2)`, parse with `parseFloat()`
-- Charts: Recharts with ResponsiveContainer, dark theme
+- Financial math: all in `lib/finance/` (server-side), money as `numeric(12,2)` → `parseFloat()`
+- Industry config: `getConfigForPractice(practiceId)` for any industry-specific behavior
+- Charts: Recharts with ResponsiveContainer
 - Route groups: `(app)` authenticated + sidebar, `(auth)` unauthenticated + minimal
-- State: Zustand stores in `lib/store/`, persist middleware where client-side persistence needed
-
-## Known Issues
-
-1. **PDF export not implemented** — Export route only supports CSV. Phase 4 should add PDF generation.
-2. **Vendor lists are dental-only** — `lib/categorization/vendors.ts` has dental-specific vendors. Phase 4 extracts into industry config system.
-3. **Seasonality indices are dental-only** — Forecast uses hardcoded dental seasonality. Phase 4 makes configurable per industry.
-4. **Overhead benchmarks are dental-only** — 55–65% target. Different industries have different ranges. Phase 4 makes configurable.
-5. **Single practice per user** — Users belong to exactly one practice. Phase 4 adds multi-practice support.
-6. **No Plaid integration** — Net worth tracking requires external bank/investment data.
+- Role awareness: `usePermissions()` hook for client-side, `requireRole()` for API
+- **IMPORTANT: All financial advisory content must include disclaimer: "This is not financial advice. Consult your CPA/financial advisor."**

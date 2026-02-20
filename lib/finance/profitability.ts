@@ -1,6 +1,7 @@
 import { db } from "@/lib/db";
 import { transactions, categorizations } from "@/lib/db/schema";
 import { eq, and, gte, lte, sql } from "drizzle-orm";
+import { getConfigForPractice } from "@/lib/industries";
 
 export interface ProfitabilityReport {
   period: { start: Date; end: Date };
@@ -143,6 +144,9 @@ export async function calculateProfitability(
   const netOperatingIncome = totalRevenue - totalExpenses;
   const trueNetProfit = netOperatingIncome - ownerComp;
 
+  // Load industry config for overhead benchmarks
+  const config = await getConfigForPractice(practiceId);
+
   // Build monthly breakdown sorted by month
   const monthlyBreakdown: MonthlyProfitability[] = Array.from(
     monthlyMap.entries()
@@ -161,7 +165,7 @@ export async function calculateProfitability(
     revenue: { total: totalRevenue, byCategory: revenueByCategory },
     operatingExpenses: { total: totalExpenses, byCategory: expenseByCategory },
     overheadRatio,
-    overheadStatus: getOverheadStatus(overheadRatio),
+    overheadStatus: getOverheadStatus(overheadRatio, config.benchmarks),
     netOperatingIncome,
     ownerCompensation: ownerComp,
     trueNetProfit,

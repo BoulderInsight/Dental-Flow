@@ -129,4 +129,14 @@ export const generalConfig: IndustryConfig = {
     "owner salary",
     "owner draw",
   ],
+  valuationMultipliers: {
+    revenueMultiple: { low: 0.40, mid: 0.60, high: 0.80 },
+    ebitdaMultiple: { low: 3.0, mid: 4.0, high: 5.0 },
+    sdeMultiple: { low: 1.5, mid: 2.25, high: 3.0 },
+  },
+  taxDefaults: {
+    section179Limit: 1220000,
+    bonusDepreciationRate: 0.4,
+    estimatedTaxQuarters: ["04-15", "06-15", "09-15", "01-15"],
+  },
 };

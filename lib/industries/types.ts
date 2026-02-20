@@ -23,4 +23,14 @@ export interface IndustryConfig {
   };
   debtServicePatterns: string[];
   ownerDrawPatterns: string[];
+  valuationMultipliers?: {
+    revenueMultiple: { low: number; mid: number; high: number };
+    ebitdaMultiple: { low: number; mid: number; high: number };
+    sdeMultiple: { low: number; mid: number; high: number };
+  };
+  taxDefaults?: {
+    section179Limit: number;
+    bonusDepreciationRate: number;
+    estimatedTaxQuarters: string[];
+  };
 }

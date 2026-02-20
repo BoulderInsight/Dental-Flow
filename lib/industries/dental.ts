@@ -183,4 +183,14 @@ export const dentalConfig: IndustryConfig = {
     "owner salary",
     "owner draw",
   ],
+  valuationMultipliers: {
+    revenueMultiple: { low: 0.65, mid: 0.75, high: 0.85 },
+    ebitdaMultiple: { low: 4.0, mid: 5.0, high: 6.0 },
+    sdeMultiple: { low: 2.0, mid: 2.5, high: 3.0 },
+  },
+  taxDefaults: {
+    section179Limit: 1220000,
+    bonusDepreciationRate: 0.4,
+    estimatedTaxQuarters: ["04-15", "06-15", "09-15", "01-15"],
+  },
 };

@@ -18,32 +18,72 @@ import {
   Wallet,
   Link2,
   Factory,
+  Scale,
+  Landmark,
+  Percent,
+  BadgeDollarSign,
+  FileText,
+  Calculator,
+  RefreshCw,
 } from "lucide-react";
 import { useState } from "react";
 import { PracticeSwitcher } from "./practice-switcher";
 
-const navItems = [
-  { href: "/", label: "Dashboard", icon: LayoutDashboard, requireWrite: false },
-  { href: "/transactions", label: "Transactions", icon: Receipt, requireWrite: false },
-  { href: "/review", label: "Review", icon: ClipboardCheck, requireWrite: false },
-  { href: "/finance", label: "Financials", icon: DollarSign, requireWrite: false },
-  { href: "/finance/net-worth", label: "Net Worth", icon: Wallet, requireWrite: false },
-  { href: "/forecast", label: "Forecast", icon: TrendingUp, requireWrite: false },
-  { href: "/settings/rules", label: "Rules", icon: Settings, requireWrite: true },
-  { href: "/settings/industry", label: "Industry", icon: Factory, requireWrite: true },
-  { href: "/settings/accounts", label: "Accounts", icon: Link2, requireWrite: true },
-  { href: "/settings/practices/members", label: "Members", icon: Users, requireWrite: false },
-  { href: "/architecture", label: "Architecture", icon: Network, requireWrite: false },
+interface NavSection {
+  label: string;
+  items: Array<{
+    href: string;
+    label: string;
+    icon: React.ComponentType<{ size?: number }>;
+    requireWrite: boolean;
+  }>;
+}
+
+const navSections: NavSection[] = [
+  {
+    label: "Overview",
+    items: [
+      { href: "/", label: "Dashboard", icon: LayoutDashboard, requireWrite: false },
+      { href: "/transactions", label: "Transactions", icon: Receipt, requireWrite: false },
+      { href: "/review", label: "Review", icon: ClipboardCheck, requireWrite: false },
+    ],
+  },
+  {
+    label: "Reports",
+    items: [
+      { href: "/finance", label: "Financials", icon: DollarSign, requireWrite: false },
+      { href: "/finance/net-worth", label: "Net Worth", icon: Wallet, requireWrite: false },
+      { href: "/forecast", label: "Forecast", icon: TrendingUp, requireWrite: false },
+    ],
+  },
+  {
+    label: "Advisory",
+    items: [
+      { href: "/finance/debt-capacity", label: "Debt Capacity", icon: Scale, requireWrite: false },
+      { href: "/finance/loans", label: "Loans", icon: Landmark, requireWrite: false },
+      { href: "/finance/cost-of-capital", label: "Cost of Capital", icon: Percent, requireWrite: false },
+      { href: "/finance/valuation", label: "Valuation", icon: BadgeDollarSign, requireWrite: false },
+      { href: "/finance/tax-strategy", label: "Tax Strategy", icon: FileText, requireWrite: false },
+      { href: "/finance/roi", label: "ROI Calculator", icon: Calculator, requireWrite: false },
+    ],
+  },
+  {
+    label: "Settings",
+    items: [
+      { href: "/settings/rules", label: "Rules", icon: Settings, requireWrite: true },
+      { href: "/settings/industry", label: "Industry", icon: Factory, requireWrite: true },
+      { href: "/settings/accounts", label: "Accounts", icon: Link2, requireWrite: true },
+      { href: "/settings/qbo-sync", label: "QBO Sync", icon: RefreshCw, requireWrite: true },
+      { href: "/settings/practices/members", label: "Members", icon: Users, requireWrite: false },
+      { href: "/architecture", label: "Architecture", icon: Network, requireWrite: false },
+    ],
+  },
 ];
 
 export function AppSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const { canWrite } = usePermissions();
-
-  const visibleNavItems = navItems.filter(
-    (item) => !item.requireWrite || canWrite
-  );
 
   return (
     <aside
@@ -57,10 +97,7 @@ export function AppSidebar() {
           {!collapsed && (
             <Link href="/" className="flex items-center gap-2">
               <span className="text-lg font-bold text-sidebar-primary">
-                DentalFlow
-              </span>
-              <span className="text-xs font-medium text-muted-foreground">
-                Pro
+                CFO Pro
               </span>
             </Link>
           )}
@@ -85,25 +122,42 @@ export function AppSidebar() {
         )}
       </div>
 
-      <nav className="flex-1 space-y-1 p-2">
-        {visibleNavItems.map((item) => {
-          const isActive =
-            pathname === item.href ||
-            (item.href !== "/" && pathname.startsWith(item.href));
+      <nav className="flex-1 overflow-y-auto p-2">
+        {navSections.map((section) => {
+          const visibleItems = section.items.filter(
+            (item) => !item.requireWrite || canWrite
+          );
+          if (visibleItems.length === 0) return null;
           return (
-            <Link
-              key={item.href}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-sidebar-accent text-sidebar-primary"
-                  : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+            <div key={section.label} className="mb-3">
+              {!collapsed && (
+                <p className="mb-1 px-3 pt-2 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
+                  {section.label}
+                </p>
               )}
-            >
-              <item.icon size={18} />
-              {!collapsed && <span>{item.label}</span>}
-            </Link>
+              <div className="space-y-0.5">
+                {visibleItems.map((item) => {
+                  const isActive =
+                    pathname === item.href ||
+                    (item.href !== "/" && pathname.startsWith(item.href));
+                  return (
+                    <Link
+                      key={item.href}
+                      href={item.href}
+                      className={cn(
+                        "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                        isActive
+                          ? "bg-sidebar-accent text-sidebar-primary"
+                          : "text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                      )}
+                    >
+                      <item.icon size={18} />
+                      {!collapsed && <span>{item.label}</span>}
+                    </Link>
+                  );
+                })}
+              </div>
+            </div>
           );
         })}
       </nav>

@@ -429,6 +429,139 @@ export const netWorthSnapshots = pgTable(
   ]
 );
 
+// Phase 5: Loans table — detected or manually entered
+export const loans = pgTable(
+  "loans",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    name: text("name").notNull(),
+    lender: text("lender"),
+    originalAmount: numeric("original_amount", { precision: 14, scale: 2 }),
+    currentBalance: numeric("current_balance", { precision: 14, scale: 2 }),
+    interestRate: numeric("interest_rate", { precision: 5, scale: 4 }),
+    monthlyPayment: numeric("monthly_payment", { precision: 12, scale: 2 }),
+    remainingMonths: integer("remaining_months"),
+    loanType: text("loan_type").notNull(),
+    startDate: date("start_date"),
+    maturityDate: date("maturity_date"),
+    isAutoDetected: boolean("is_auto_detected").default(false).notNull(),
+    matchedTransactionPattern: text("matched_transaction_pattern"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [index("loans_practice_idx").on(table.practiceId)]
+);
+
+// Phase 5: Tax alerts
+export const taxAlerts = pgTable(
+  "tax_alerts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    alertType: text("alert_type").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    priority: text("priority").notNull(),
+    actionUrl: text("action_url"),
+    taxYear: integer("tax_year").notNull(),
+    isDismissed: boolean("is_dismissed").default(false).notNull(),
+    dismissedAt: timestamp("dismissed_at"),
+    expiresAt: timestamp("expires_at"),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("tax_alerts_practice_year_idx").on(table.practiceId, table.taxYear),
+  ]
+);
+
+// Phase 5: Valuation snapshots — tracked quarterly
+export const valuationSnapshots = pgTable(
+  "valuation_snapshots",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    snapshotDate: date("snapshot_date").notNull(),
+    revenueMultipleValue: numeric("revenue_multiple_value", {
+      precision: 14,
+      scale: 2,
+    }),
+    ebitdaMultipleValue: numeric("ebitda_multiple_value", {
+      precision: 14,
+      scale: 2,
+    }),
+    sdeMultipleValue: numeric("sde_multiple_value", {
+      precision: 14,
+      scale: 2,
+    }),
+    revenueMultiplier: numeric("revenue_multiplier", {
+      precision: 5,
+      scale: 2,
+    }),
+    ebitdaMultiplier: numeric("ebitda_multiplier", {
+      precision: 5,
+      scale: 2,
+    }),
+    sdeMultiplier: numeric("sde_multiplier", { precision: 5, scale: 2 }),
+    annualRevenue: numeric("annual_revenue", { precision: 14, scale: 2 }),
+    ebitda: numeric("ebitda", { precision: 14, scale: 2 }),
+    sde: numeric("sde", { precision: 14, scale: 2 }),
+    computedAt: timestamp("computed_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("valuation_snapshots_practice_idx").on(
+      table.practiceId,
+      table.snapshotDate
+    ),
+  ]
+);
+
+// Phase 5: ROI analyses — saved deal comparisons
+export const roiAnalyses = pgTable(
+  "roi_analyses",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    name: text("name").notNull(),
+    dealType: text("deal_type").notNull(),
+    inputs: jsonb("inputs").notNull(),
+    results: jsonb("results").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [index("roi_analyses_practice_idx").on(table.practiceId)]
+);
+
+// Phase 5: QBO account mappings for write-back
+export const qboAccountMappings = pgTable(
+  "qbo_account_mappings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    ourCategory: text("our_category").notNull(),
+    qboAccountId: text("qbo_account_id").notNull(),
+    qboAccountName: text("qbo_account_name").notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("qbo_account_mappings_practice_category_idx").on(
+      table.practiceId,
+      table.ourCategory
+    ),
+  ]
+);
+
 // Type exports
 export type Practice = typeof practices.$inferSelect;
 export type NewPractice = typeof practices.$inferInsert;
@@ -454,3 +587,11 @@ export type IndustryConfigRow = typeof industryConfigs.$inferSelect;
 export type PlaidConnection = typeof plaidConnections.$inferSelect;
 export type PlaidAccount = typeof plaidAccounts.$inferSelect;
 export type NetWorthSnapshot = typeof netWorthSnapshots.$inferSelect;
+export type Loan = typeof loans.$inferSelect;
+export type NewLoan = typeof loans.$inferInsert;
+export type TaxAlert = typeof taxAlerts.$inferSelect;
+export type NewTaxAlert = typeof taxAlerts.$inferInsert;
+export type ValuationSnapshot = typeof valuationSnapshots.$inferSelect;
+export type RoiAnalysis = typeof roiAnalyses.$inferSelect;
+export type NewRoiAnalysis = typeof roiAnalyses.$inferInsert;
+export type QboAccountMapping = typeof qboAccountMappings.$inferSelect;

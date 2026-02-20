@@ -139,6 +139,33 @@ function generateVariableExpenses(month: number): SeedTxn[] {
     );
   }
 
+  // Phase 5: Retirement contributions (monthly SEP-IRA)
+  txns.push(
+    { vendorName: "Vanguard", description: "SEP-IRA contribution", amount: "-4500.00", accountRef: "Retirement Contribution" },
+  );
+
+  // Phase 5: Equipment purchases (occasional big-ticket items to trigger depreciation alerts)
+  if (month === 2) {
+    txns.push(
+      { vendorName: "Dentsply Sirona", description: "CEREC Primescan AC unit", amount: "-45000.00", accountRef: "Equipment" },
+    );
+  }
+  if (month === 6) {
+    txns.push(
+      { vendorName: "A-dec", description: "A-dec 500 dental chair", amount: "-18500.00", accountRef: "Equipment" },
+    );
+  }
+  if (month === 10) {
+    txns.push(
+      { vendorName: "Planmeca", description: "ProMax 3D CBCT scanner", amount: "-85000.00", accountRef: "Equipment" },
+    );
+  }
+
+  // Phase 5: Additional loan pattern (SBA line of credit)
+  txns.push(
+    { vendorName: "Chase Bank", description: "SBA line of credit payment", amount: "-650.00", accountRef: "Line of Credit" },
+  );
+
   // Personal expenses (owner's personal charges through business account)
   txns.push(
     { vendorName: "Netflix", description: "Monthly subscription", amount: "-22.99", accountRef: "Entertainment" },
@@ -173,9 +200,12 @@ async function seed() {
     .insert(practices)
     .values({
       name: "Sunny Valley Dental",
+      industry: "dental",
       qboRealmId: "demo-realm-123",
       fiscalYearStart: 1,
       practiceAddresses: ["123 Main St, Sunnyvale, CA 94086"],
+      realEstateValue: "650000.00",
+      estimatedValue: "1200000.00",
     })
     .returning();
 
@@ -259,7 +289,10 @@ async function seed() {
   console.log(`Inserted ${allTxns.length} transactions across 18 months`);
   console.log("Income transactions included: Patient Collections, Insurance Reimbursements, Financing Revenue");
   console.log("Owner's Draw: $15,000/mo");
-  console.log("Loan payments: Practice Loan $3,200/mo + Equipment Loan $850/mo");
+  console.log("Loan payments: Practice Loan $3,200/mo + Equipment Loan $850/mo + SBA LOC $650/mo");
+  console.log("Retirement: SEP-IRA $4,500/mo");
+  console.log("Equipment purchases: CEREC $45K (Feb), Dental Chair $18.5K (Jun), CBCT $85K (Oct)");
+  console.log("Practice real estate value: $650K (triggers cost segregation alert)");
   console.log("Seed complete!");
 
   await pool.end();
