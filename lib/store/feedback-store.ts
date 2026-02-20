@@ -26,6 +26,6 @@ export const useFeedbackStore = create<FeedbackState>()(
       },
       clearCorrections: () => set({ corrections: {} }),
     }),
-    { name: "dentalflow-feedback" }
+    { name: "practicepulse-feedback" }
   )
 );

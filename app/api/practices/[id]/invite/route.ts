@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/lib/db";
-import { users, userPractices } from "@/lib/db/schema";
+import { users, userPractices, practices } from "@/lib/db/schema";
 import { eq, and } from "drizzle-orm";
 import { getSessionOrDemo } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/audit/logger";
+import { sendEmail } from "@/lib/email/client";
+import { inviteEmail } from "@/lib/email/templates";
+import { APP_URL } from "@/lib/config/branding";
 
 const inviteSchema = z.object({
   email: z.string().email(),
@@ -98,6 +101,26 @@ export async function POST(
       invitedBy: session.userId,
       invitedAt: new Date(),
       acceptedAt: null,
+    });
+
+    // Send invite email
+    const [practice] = await db
+      .select({ name: practices.name })
+      .from(practices)
+      .where(eq(practices.id, practiceId))
+      .limit(1);
+
+    const emailContent = inviteEmail({
+      inviterName: session.name,
+      practiceName: practice?.name ?? "a practice",
+      role,
+      acceptUrl: `${APP_URL}/login`,
+    });
+
+    await sendEmail({
+      to: email,
+      subject: emailContent.subject,
+      html: emailContent.html,
     });
 
     await logAuditEvent({

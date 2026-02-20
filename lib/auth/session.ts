@@ -29,7 +29,7 @@ export async function getSessionOrDemo(): Promise<AppSession | null> {
       userId: "demo-user",
       practiceId: practice.id,
       role: "owner",
-      email: "demo@dentalflow.dev",
+      email: "demo@practicepulse.dev",
       name: "Demo User",
     };
   }

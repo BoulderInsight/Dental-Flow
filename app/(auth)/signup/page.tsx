@@ -93,8 +93,7 @@ export default function SignupPage() {
     <Card>
       <CardHeader className="text-center">
         <CardTitle className="text-2xl">
-          <span className="text-primary">DentalFlow</span>{" "}
-          <span className="text-muted-foreground text-sm font-normal">Pro</span>
+          <span className="text-primary">PracticePulse</span>
         </CardTitle>
         <p className="text-sm text-muted-foreground">
           Create your account

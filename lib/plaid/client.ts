@@ -19,7 +19,7 @@ export async function createLinkToken(
 ): Promise<string> {
   const response = await plaidClient.linkTokenCreate({
     user: { client_user_id: `${practiceId}-${userId}` },
-    client_name: "DentalFlow Pro",
+    client_name: "PracticePulse",
     products: [Products.Transactions, Products.Investments, Products.Liabilities],
     country_codes: [CountryCode.Us],
     language: "en",

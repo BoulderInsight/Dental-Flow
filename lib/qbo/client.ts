@@ -21,7 +21,7 @@ export function generateAuthUrl(): string {
   const client = getOAuthClient();
   return client.authorizeUri({
     scope: [OAuthClient.scopes.Accounting],
-    state: "dentalflow-connect",
+    state: "practicepulse-connect",
   });
 }
 

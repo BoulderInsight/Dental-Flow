@@ -562,6 +562,154 @@ export const qboAccountMappings = pgTable(
   ]
 );
 
+// Phase 6: Retirement planning
+export const retirementProfiles = pgTable(
+  "retirement_profiles",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    currentAge: integer("current_age").notNull(),
+    targetRetirementAge: integer("target_retirement_age").notNull(),
+    desiredMonthlyIncome: numeric("desired_monthly_income", {
+      precision: 12,
+      scale: 2,
+    }).notNull(),
+    socialSecurityEstimate: numeric("social_security_estimate", {
+      precision: 12,
+      scale: 2,
+    }).default("0"),
+    otherPensionIncome: numeric("other_pension_income", {
+      precision: 12,
+      scale: 2,
+    }).default("0"),
+    riskTolerance: text("risk_tolerance").default("moderate").notNull(),
+    inflationRate: numeric("inflation_rate", {
+      precision: 5,
+      scale: 4,
+    })
+      .default("0.03")
+      .notNull(),
+    expectedReturnRate: numeric("expected_return_rate", {
+      precision: 5,
+      scale: 4,
+    })
+      .default("0.07")
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("retirement_profiles_practice_idx").on(table.practiceId),
+  ]
+);
+
+export const retirementMilestones = pgTable(
+  "retirement_milestones",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    title: text("title").notNull(),
+    targetDate: date("target_date"),
+    estimatedCost: numeric("estimated_cost", { precision: 14, scale: 2 }),
+    estimatedMonthlyIncome: numeric("estimated_monthly_income", {
+      precision: 12,
+      scale: 2,
+    }),
+    category: text("category").notNull(),
+    status: text("status").default("planned").notNull(),
+    notes: text("notes"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("retirement_milestones_practice_idx").on(table.practiceId),
+  ]
+);
+
+// Phase 6: Referral marketplace
+export const referralPartners = pgTable(
+  "referral_partners",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    name: text("name").notNull(),
+    category: text("category").notNull(),
+    description: text("description"),
+    contactEmail: text("contact_email"),
+    contactPhone: text("contact_phone"),
+    website: text("website"),
+    regions: text("regions").array(),
+    industries: text("industries").array(),
+    isActive: boolean("is_active").default(true).notNull(),
+    metadata: jsonb("metadata"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [index("referral_partners_category_idx").on(table.category)]
+);
+
+export const referralOpportunities = pgTable(
+  "referral_opportunities",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    practiceId: uuid("practice_id")
+      .references(() => practices.id, { onDelete: "cascade" })
+      .notNull(),
+    opportunityType: text("opportunity_type").notNull(),
+    title: text("title").notNull(),
+    description: text("description").notNull(),
+    estimatedSavings: numeric("estimated_savings", {
+      precision: 14,
+      scale: 2,
+    }),
+    estimatedValue: numeric("estimated_value", { precision: 14, scale: 2 }),
+    priority: text("priority").notNull(),
+    status: text("status").default("detected").notNull(),
+    matchedPartnerId: uuid("matched_partner_id").references(
+      () => referralPartners.id
+    ),
+    referredAt: timestamp("referred_at"),
+    completedAt: timestamp("completed_at"),
+    dismissedAt: timestamp("dismissed_at"),
+    metadata: jsonb("metadata"),
+    expiresAt: timestamp("expires_at"),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+  },
+  (table) => [
+    index("referral_opportunities_practice_idx").on(table.practiceId),
+    index("referral_opportunities_status_idx").on(
+      table.practiceId,
+      table.status
+    ),
+  ]
+);
+
+// Phase 6: Notification preferences
+export const notificationPreferences = pgTable(
+  "notification_preferences",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    userId: uuid("user_id")
+      .references(() => users.id, { onDelete: "cascade" })
+      .notNull(),
+    emailInvites: boolean("email_invites").default(true).notNull(),
+    emailTaxAlerts: boolean("email_tax_alerts").default(true).notNull(),
+    emailMonthlyDigest: boolean("email_monthly_digest").default(true).notNull(),
+    emailReferralOpportunities: boolean("email_referral_opportunities")
+      .default(true)
+      .notNull(),
+    emailWeeklyInsights: boolean("email_weekly_insights")
+      .default(false)
+      .notNull(),
+    createdAt: timestamp("created_at").defaultNow().notNull(),
+    updatedAt: timestamp("updated_at").defaultNow().notNull(),
+  },
+  (table) => [
+    uniqueIndex("notification_preferences_user_idx").on(table.userId),
+  ]
+);
+
 // Type exports
 export type Practice = typeof practices.$inferSelect;
 export type NewPractice = typeof practices.$inferInsert;
@@ -595,3 +743,13 @@ export type ValuationSnapshot = typeof valuationSnapshots.$inferSelect;
 export type RoiAnalysis = typeof roiAnalyses.$inferSelect;
 export type NewRoiAnalysis = typeof roiAnalyses.$inferInsert;
 export type QboAccountMapping = typeof qboAccountMappings.$inferSelect;
+export type RetirementProfile = typeof retirementProfiles.$inferSelect;
+export type NewRetirementProfile = typeof retirementProfiles.$inferInsert;
+export type RetirementMilestone = typeof retirementMilestones.$inferSelect;
+export type NewRetirementMilestone = typeof retirementMilestones.$inferInsert;
+export type ReferralPartner = typeof referralPartners.$inferSelect;
+export type NewReferralPartner = typeof referralPartners.$inferInsert;
+export type ReferralOpportunity = typeof referralOpportunities.$inferSelect;
+export type NewReferralOpportunity = typeof referralOpportunities.$inferInsert;
+export type NotificationPreference = typeof notificationPreferences.$inferSelect;
+export type NewNotificationPreference = typeof notificationPreferences.$inferInsert;

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { usePermissions } from "@/lib/hooks/use-permissions";
+import { useQuery } from "@tanstack/react-query";
 import {
   LayoutDashboard,
   Receipt,
@@ -25,18 +26,25 @@ import {
   FileText,
   Calculator,
   RefreshCw,
+  Sunset,
+  Map,
+  Sparkles,
+  Bell,
 } from "lucide-react";
 import { useState } from "react";
 import { PracticeSwitcher } from "./practice-switcher";
 
+interface NavItem {
+  href: string;
+  label: string;
+  icon: React.ComponentType<{ size?: number }>;
+  requireWrite: boolean;
+  badge?: number;
+}
+
 interface NavSection {
   label: string;
-  items: Array<{
-    href: string;
-    label: string;
-    icon: React.ComponentType<{ size?: number }>;
-    requireWrite: boolean;
-  }>;
+  items: NavItem[];
 }
 
 const navSections: NavSection[] = [
@@ -65,6 +73,14 @@ const navSections: NavSection[] = [
       { href: "/finance/valuation", label: "Valuation", icon: BadgeDollarSign, requireWrite: false },
       { href: "/finance/tax-strategy", label: "Tax Strategy", icon: FileText, requireWrite: false },
       { href: "/finance/roi", label: "ROI Calculator", icon: Calculator, requireWrite: false },
+      { href: "/finance/retirement", label: "Retirement", icon: Sunset, requireWrite: false },
+      { href: "/finance/retirement/roadmap", label: "Roadmap", icon: Map, requireWrite: false },
+    ],
+  },
+  {
+    label: "Marketplace",
+    items: [
+      { href: "/referrals", label: "Opportunities", icon: Sparkles, requireWrite: false },
     ],
   },
   {
@@ -74,16 +90,44 @@ const navSections: NavSection[] = [
       { href: "/settings/industry", label: "Industry", icon: Factory, requireWrite: true },
       { href: "/settings/accounts", label: "Accounts", icon: Link2, requireWrite: true },
       { href: "/settings/qbo-sync", label: "QBO Sync", icon: RefreshCw, requireWrite: true },
+      { href: "/settings/notifications", label: "Notifications", icon: Bell, requireWrite: false },
       { href: "/settings/practices/members", label: "Members", icon: Users, requireWrite: false },
       { href: "/architecture", label: "Architecture", icon: Network, requireWrite: false },
     ],
   },
 ];
 
+interface BriefingAlerts {
+  activeAlerts: {
+    taxAlerts: number;
+    referralOpportunities: number;
+  };
+}
+
 export function AppSidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const { canWrite } = usePermissions();
+
+  const { data: briefing } = useQuery<BriefingAlerts>({
+    queryKey: ["cfo-briefing"],
+    queryFn: async () => {
+      const res = await fetch("/api/dashboard/briefing");
+      if (!res.ok) return { activeAlerts: { taxAlerts: 0, referralOpportunities: 0 } };
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const badgeMap: Record<string, number> = {};
+  if (briefing?.activeAlerts) {
+    if (briefing.activeAlerts.taxAlerts > 0) {
+      badgeMap["/finance/tax-strategy"] = briefing.activeAlerts.taxAlerts;
+    }
+    if (briefing.activeAlerts.referralOpportunities > 0) {
+      badgeMap["/referrals"] = briefing.activeAlerts.referralOpportunities;
+    }
+  }
 
   return (
     <aside
@@ -97,7 +141,7 @@ export function AppSidebar() {
           {!collapsed && (
             <Link href="/" className="flex items-center gap-2">
               <span className="text-lg font-bold text-sidebar-primary">
-                CFO Pro
+                PracticePulse
               </span>
             </Link>
           )}
@@ -140,6 +184,7 @@ export function AppSidebar() {
                   const isActive =
                     pathname === item.href ||
                     (item.href !== "/" && pathname.startsWith(item.href));
+                  const badge = badgeMap[item.href];
                   return (
                     <Link
                       key={item.href}
@@ -152,7 +197,16 @@ export function AppSidebar() {
                       )}
                     >
                       <item.icon size={18} />
-                      {!collapsed && <span>{item.label}</span>}
+                      {!collapsed && (
+                        <>
+                          <span className="flex-1">{item.label}</span>
+                          {badge != null && badge > 0 && (
+                            <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-primary/20 px-1.5 text-[10px] font-semibold text-primary">
+                              {badge}
+                            </span>
+                          )}
+                        </>
+                      )}
                     </Link>
                   );
                 })}

@@ -1,7 +1,16 @@
 import "dotenv/config";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Pool } from "pg";
-import { practices, transactions } from "./schema";
+import {
+  practices,
+  transactions,
+  users,
+  retirementProfiles,
+  retirementMilestones,
+  referralPartners,
+  referralOpportunities,
+  notificationPreferences,
+} from "./schema";
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
@@ -293,6 +302,216 @@ async function seed() {
   console.log("Retirement: SEP-IRA $4,500/mo");
   console.log("Equipment purchases: CEREC $45K (Feb), Dental Chair $18.5K (Jun), CBCT $85K (Oct)");
   console.log("Practice real estate value: $650K (triggers cost segregation alert)");
+
+  // ── Phase 6: Retirement profile + milestones ─────────────────────────────
+
+  const [retProfile] = await db
+    .insert(retirementProfiles)
+    .values({
+      practiceId: practice.id,
+      currentAge: 42,
+      targetRetirementAge: 60,
+      desiredMonthlyIncome: "15000.00",
+      socialSecurityEstimate: "2500.00",
+      otherPensionIncome: "0.00",
+      riskTolerance: "moderate",
+      inflationRate: "0.03",
+      expectedReturnRate: "0.07",
+    })
+    .returning();
+
+  console.log(`Created retirement profile (age ${retProfile.currentAge}, target ${retProfile.targetRetirementAge})`);
+
+  const oneYearOut = new Date();
+  oneYearOut.setFullYear(oneYearOut.getFullYear() + 1);
+  const twoYearsOut = new Date();
+  twoYearsOut.setFullYear(twoYearsOut.getFullYear() + 2);
+  const threeYearsOut = new Date();
+  threeYearsOut.setFullYear(threeYearsOut.getFullYear() + 3);
+  const retirementDate = new Date();
+  retirementDate.setFullYear(retirementDate.getFullYear() + (60 - 42));
+
+  await db.insert(retirementMilestones).values([
+    {
+      practiceId: practice.id,
+      title: "Max Out SEP-IRA Contributions",
+      targetDate: oneYearOut.toISOString().split("T")[0],
+      category: "contribution",
+      status: "planned",
+      notes: "Increase annual SEP-IRA contributions to the $69K federal limit.",
+    },
+    {
+      practiceId: practice.id,
+      title: "Purchase Rental Property #1",
+      targetDate: twoYearsOut.toISOString().split("T")[0],
+      estimatedCost: "350000.00",
+      estimatedMonthlyIncome: "2500.00",
+      category: "real_estate",
+      status: "planned",
+      notes: "Target a duplex or small multi-family near the practice area.",
+    },
+    {
+      practiceId: practice.id,
+      title: "Pay Off Practice Acquisition Loan",
+      targetDate: threeYearsOut.toISOString().split("T")[0],
+      category: "debt_payoff",
+      status: "in_progress",
+      notes: "Accelerate payments on the Wells Fargo practice acquisition loan.",
+    },
+    {
+      practiceId: practice.id,
+      title: "Sell Practice",
+      targetDate: retirementDate.toISOString().split("T")[0],
+      category: "practice_sale",
+      status: "planned",
+      notes: "Plan for practice transition — associate buy-in or outright sale.",
+    },
+  ]);
+
+  console.log("Created 4 retirement milestones");
+
+  // ── Phase 6: Referral partners ───────────────────────────────────────────
+
+  const partnerValues = [
+    {
+      name: "Pacific Dental Lending",
+      category: "lender",
+      description: "Specialized dental practice financing with competitive SBA rates.",
+      contactEmail: "loans@pacificdentallending.com",
+      website: "https://pacificdentallending.com",
+      regions: ["CA", "OR", "WA"],
+      industries: ["dental"],
+      isActive: true,
+    },
+    {
+      name: "MedPro Group Insurance",
+      category: "insurance",
+      description: "Professional liability and property insurance for healthcare practices.",
+      contactEmail: "quotes@medprogroup.com",
+      website: "https://medprogroup.com",
+      regions: ["US"],
+      industries: ["dental", "chiropractic", "veterinary"],
+      isActive: true,
+    },
+    {
+      name: "DentalCPA Partners",
+      category: "cpa",
+      description: "CPA firm specializing in dental practice accounting and tax optimization.",
+      contactEmail: "info@dentalcpa.com",
+      website: "https://dentalcpa.com",
+      regions: ["US"],
+      industries: ["dental"],
+      isActive: true,
+    },
+    {
+      name: "Pinnacle Wealth Advisors",
+      category: "financial_advisor",
+      description: "Financial planning and wealth management for healthcare professionals.",
+      contactEmail: "plan@pinnaclewealth.com",
+      website: "https://pinnaclewealth.com",
+      regions: ["US"],
+      industries: ["dental", "chiropractic", "veterinary"],
+      isActive: true,
+    },
+    {
+      name: "PracticeMatch Brokers",
+      category: "broker",
+      description: "Practice sales and acquisitions brokerage for dental professionals.",
+      contactEmail: "deals@practicematch.com",
+      website: "https://practicematch.com",
+      regions: ["CA", "TX", "FL", "NY"],
+      industries: ["dental"],
+      isActive: true,
+    },
+    {
+      name: "Dental Equipment Finance Co",
+      category: "equipment_financing",
+      description: "Equipment leasing and financing with $0-down options for dental technology.",
+      contactEmail: "leasing@dentalequipfinance.com",
+      website: "https://dentalequipfinance.com",
+      regions: ["US"],
+      industries: ["dental"],
+      isActive: true,
+    },
+  ];
+
+  const insertedPartners = await db
+    .insert(referralPartners)
+    .values(partnerValues)
+    .returning();
+
+  console.log(`Created ${insertedPartners.length} referral partners`);
+
+  // ── Phase 6: Referral opportunities ──────────────────────────────────────
+
+  const lenderPartner = insertedPartners.find((p) => p.category === "lender");
+  const insurancePartner = insertedPartners.find((p) => p.category === "insurance");
+  const cpaPartner = insertedPartners.find((p) => p.category === "cpa");
+
+  await db.insert(referralOpportunities).values([
+    {
+      practiceId: practice.id,
+      opportunityType: "refinance",
+      title: "Practice Loan Refinance Opportunity",
+      description:
+        "Your current practice loan rate appears above market. Refinancing could save an estimated $4,800/year.",
+      estimatedSavings: "4800.00",
+      priority: "high",
+      status: "detected",
+      matchedPartnerId: lenderPartner?.id,
+      expiresAt: new Date(now.getFullYear(), now.getMonth() + 3, 0),
+    },
+    {
+      practiceId: practice.id,
+      opportunityType: "insurance",
+      title: "Professional Liability Insurance Review",
+      description:
+        "Your liability premiums may be reducible. A competitive quote could save $1,200/year.",
+      estimatedSavings: "1200.00",
+      priority: "medium",
+      status: "detected",
+      matchedPartnerId: insurancePartner?.id,
+      expiresAt: new Date(now.getFullYear(), now.getMonth() + 6, 0),
+    },
+    {
+      practiceId: practice.id,
+      opportunityType: "tax_planning",
+      title: "Tax Strategy Review with Dental CPA",
+      description:
+        "Based on your revenue and entity structure, a specialized dental CPA could identify $8,000+ in annual tax savings.",
+      estimatedSavings: "8000.00",
+      priority: "high",
+      status: "detected",
+      matchedPartnerId: cpaPartner?.id,
+      expiresAt: new Date(now.getFullYear() + 1, 0, 31),
+    },
+  ]);
+
+  console.log("Created 3 detected referral opportunities");
+
+  // ── Phase 6: Notification preferences for demo user ──────────────────────
+
+  // Check if a demo user exists; if not, create one for notification prefs
+  const [existingUser] = await db
+    .select({ id: users.id })
+    .from(users)
+    .limit(1);
+
+  if (existingUser) {
+    await db.insert(notificationPreferences).values({
+      userId: existingUser.id,
+      emailInvites: true,
+      emailTaxAlerts: true,
+      emailMonthlyDigest: true,
+      emailReferralOpportunities: true,
+      emailWeeklyInsights: false,
+    });
+    console.log("Created notification preferences for existing user");
+  } else {
+    console.log("No user found — skipping notification preferences (demo mode uses session mock)");
+  }
+
+  console.log("Phase 6 seed data complete!");
   console.log("Seed complete!");
 
   await pool.end();

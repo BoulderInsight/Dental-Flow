@@ -6,9 +6,9 @@ import { Providers } from "./providers";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "DentalFlow Pro",
+  title: "PracticePulse",
   description:
-    "Financial management system for dental practices — transaction categorization, review, and forecasting",
+    "Your Personal CFO — financial management for small businesses with QBO integration",
 };
 
 export default function RootLayout({
